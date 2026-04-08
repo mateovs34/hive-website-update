@@ -863,12 +863,15 @@
         box-shadow: 4px 0 24px rgba(0,0,0,0.4);
       }
 
-      /* Stats: 2 columns */
+      /* Stats: 2 columns, compact */
       .stats-bar {
         grid-template-columns: repeat(2, 1fr);
-        padding: 10px 12px; gap: 8px;
+        padding: 8px 12px; gap: 7px;
       }
-      .stat-value { font-size: 18px; }
+      .stat-card   { padding: 9px 11px; }
+      .stat-value  { font-size: 17px; letter-spacing: -0.02em; }
+      .stat-label  { font-size: 9px; }
+      .stat-sub    { font-size: 10px; }
 
       /* Pedidos: single col */
       .pedidos-main { grid-template-columns: 1fr; }
@@ -922,7 +925,8 @@
     }
 
     /* ── Analytics ──────────────────────────────────────────────────────────── */
-    #section-analytics { display: flex; flex-direction: column; overflow: hidden; }
+    /* No redefinir display aquí — .app-section ya lo setea y .hidden lo overridea */
+    #section-analytics { flex-direction: column; overflow: hidden; }
     .an-topbar {
       display: flex; align-items: center; gap: 10px; flex-shrink: 0;
       padding: 0 20px; height: 54px;
@@ -1643,7 +1647,7 @@ window.logout = function () {
   showAuthOverlay();
 };
 
-function onAuthSuccess(token, businessId) {
+function onAuthSuccess(token, businessId, nombre) {
   localStorage.setItem('chat_token', token);
 
   // Limpiar todo el estado del negocio anterior antes de cargar el nuevo
@@ -1669,9 +1673,12 @@ function onAuthSuccess(token, businessId) {
 
   document.getElementById('auth-overlay').classList.add('hidden');
 
-  // Actualizar header móvil con el businessId
+  // Actualizar sidebar title y header móvil con el nombre real del negocio
+  var displayName = nombre || newBid;
+  var titleEl = document.getElementById('sidebar-title');
+  if (titleEl) titleEl.textContent = displayName;
   var mobileName = document.getElementById('mobile-biz-name');
-  if (mobileName) mobileName.textContent = newBid;
+  if (mobileName) mobileName.textContent = displayName;
 
   window._startDashboard && window._startDashboard();
 }
@@ -1699,7 +1706,7 @@ window.doLogin = function () {
   }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (!res.ok) { errEl.textContent = res.data.error || 'Error al iniciar sesión'; return; }
-      onAuthSuccess(res.data.token, res.data.businessId);
+      onAuthSuccess(res.data.token, res.data.businessId, res.data.nombre);
     })
     .catch(function () { errEl.textContent = 'Error de conexión'; })
     .finally(function () { btn.disabled = false; btn.textContent = 'Iniciar sesión'; });
@@ -1724,7 +1731,7 @@ window.doRegister = function () {
   }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (!res.ok) { errEl.textContent = res.data.error || 'Error al registrarse'; return; }
-      onAuthSuccess(res.data.token, res.data.businessId);
+      onAuthSuccess(res.data.token, res.data.businessId, res.data.nombre);
     })
     .catch(function () { errEl.textContent = 'Error de conexión'; })
     .finally(function () { btn.disabled = false; btn.textContent = 'Crear cuenta'; });
