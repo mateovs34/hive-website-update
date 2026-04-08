@@ -28,6 +28,15 @@
       --yellow:     #f59e0b;
       --yellow-bg:  rgba(245,158,11,0.10);
       --yellow-bdr: rgba(245,158,11,0.25);
+      --orange:     #f97316;
+      --orange-bg:  rgba(249,115,22,0.10);
+      --orange-bdr: rgba(249,115,22,0.25);
+      --purple:     #a855f7;
+      --purple-bg:  rgba(168,85,247,0.10);
+      --purple-bdr: rgba(168,85,247,0.25);
+      --blue:       #3b82f6;
+      --blue-bg:    rgba(59,130,246,0.10);
+      --blue-bdr:   rgba(59,130,246,0.25);
       --sidebar-w:  220px;
     }
 
@@ -276,9 +285,24 @@
       border-radius: 20px; letter-spacing: 0.05em;
       text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
     }
-    .status-badge.pendiente  { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-bdr); }
-    .status-badge.confirmado { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-bdr); }
-    .status-badge.cancelado  { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bdr); }
+    .status-badge.pendiente      { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-bdr); }
+    .status-badge.confirmado     { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-bdr); }
+    .status-badge.en_preparacion { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-bdr); }
+    .status-badge.en_camino      { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-bdr); }
+    .status-badge.entregado      { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-bdr); }
+    .status-badge.cancelado      { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-bdr); }
+    .estado-select {
+      font-size: 11px; font-weight: 600; padding: 4px 8px;
+      border-radius: 6px; border: 1px solid var(--border2);
+      background: var(--surface2); color: var(--text); cursor: pointer;
+      outline: none;
+    }
+    .estado-select.pendiente      { border-color: var(--yellow-bdr); color: var(--yellow); }
+    .estado-select.confirmado     { border-color: var(--blue-bdr);   color: var(--blue); }
+    .estado-select.en_preparacion { border-color: var(--orange-bdr); color: var(--orange); }
+    .estado-select.en_camino      { border-color: var(--purple-bdr); color: var(--purple); }
+    .estado-select.entregado      { border-color: var(--green-bdr);  color: var(--green); }
+    .estado-select.cancelado      { border-color: var(--red-bdr);    color: var(--red); }
     .order-timing {
       display: flex; align-items: center; gap: 9px;
       padding: 0 15px 8px; font-size: 11px; color: var(--muted);
@@ -887,6 +911,9 @@
               <option value="all">Todos</option>
               <option value="pendiente">Pendientes</option>
               <option value="confirmado">Confirmados</option>
+              <option value="en_preparacion">En preparación</option>
+              <option value="en_camino">En camino</option>
+              <option value="entregado">Entregados</option>
               <option value="cancelado">Cancelados</option>
             </select>
             <input class="filter-input filter-date" id="f-from" type="date"
@@ -1750,19 +1777,43 @@ document.getElementById('sidebar-bid').textContent = BID;
     );
   }
 
+  var ESTADO_LABELS = {
+    pendiente:      'Pendiente',
+    confirmado:     'Confirmado',
+    en_preparacion: '🍳 En preparación',
+    en_camino:      '🛵 En camino',
+    entregado:      '📦 Entregado',
+    cancelado:      '❌ Cancelado'
+  };
+
+  var ESTADOS_OPCIONES = [
+    { value: 'pendiente',      label: 'Pendiente' },
+    { value: 'confirmado',     label: 'Confirmado' },
+    { value: 'en_preparacion', label: '🍳 En preparación' },
+    { value: 'en_camino',      label: '🛵 En camino' },
+    { value: 'entregado',      label: '📦 Entregado' },
+    { value: 'cancelado',      label: '❌ Cancelado' }
+  ];
+
   function buildStatusBadge(estado) {
-    return '<span class="status-badge ' + estado + '">' + estado + '</span>';
+    var label = ESTADO_LABELS[estado] || estado;
+    return '<span class="status-badge ' + estado + '">' + label + '</span>';
   }
 
   function buildActions(p) {
-    if (p.estado !== 'pendiente') return '';
-    return '<button class="btn btn-reject" onclick="updatePedido(' + p.id + ',\'cancelado\')">✕ Rechazar</button>' +
-           '<button class="btn btn-accept" onclick="updatePedido(' + p.id + ',\'confirmado\')">✓ Aceptar</button>';
+    if (p.estado === 'entregado' || p.estado === 'cancelado') return '';
+    var options = ESTADOS_OPCIONES.map(function (e) {
+      return '<option value="' + e.value + '"' + (e.value === p.estado ? ' selected' : '') + '>' + e.label + '</option>';
+    }).join('');
+    return '<select class="estado-select ' + p.estado + '" onchange="updatePedido(' + p.id + ', this.value)">' + options + '</select>';
   }
 
   function patchOrderEstado(card, p) {
     var badge = card.querySelector('.status-badge');
-    if (badge) { badge.className = 'status-badge ' + p.estado; badge.textContent = p.estado; }
+    if (badge) {
+      badge.className  = 'status-badge ' + p.estado;
+      badge.textContent = ESTADO_LABELS[p.estado] || p.estado;
+    }
     var actEl = document.getElementById('actions-' + p.id);
     if (actEl) actEl.innerHTML = buildActions(p);
   }

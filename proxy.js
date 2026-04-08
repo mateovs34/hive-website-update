@@ -127,6 +127,13 @@ async function initSchema() {
   // Agregar password_hash si la tabla ya existía sin esa columna
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS password_hash TEXT`);
 
+  // Ampliar estados de pedido (migración no destructiva)
+  await pool.query(`ALTER TABLE pedidos DROP CONSTRAINT IF EXISTS pedidos_estado_check`);
+  await pool.query(`
+    ALTER TABLE pedidos ADD CONSTRAINT pedidos_estado_check
+    CHECK (estado IN ('pendiente','confirmado','en_preparacion','en_camino','entregado','cancelado'))
+  `);
+
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
     INSERT INTO negocios (business_id, nombre)
@@ -706,21 +713,47 @@ async function handleGetPedidos(businessId, res) {
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
+var ESTADOS_VALIDOS = ['pendiente', 'confirmado', 'en_preparacion', 'en_camino', 'entregado', 'cancelado'];
+
+var WA_MENSAJES_ESTADO = {
+  confirmado:     '✅ Tu pedido fue confirmado. ¡Ya lo estamos preparando!',
+  en_preparacion: '👨‍🍳 Tu pedido está en preparación.',
+  en_camino:      '🛵 Tu pedido está en camino. ¡Ya llega!',
+  entregado:      '📦 Tu pedido fue entregado. ¡Gracias por tu compra!',
+  cancelado:      '❌ Tu pedido fue cancelado. Disculpá los inconvenientes.'
+};
+
 // PATCH /pedidos/:id?businessId=xxx
 async function handlePatchPedido(id, businessId, res, raw) {
   if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
   var body; try { body = JSON.parse(raw); } catch (_) {
     return sendJSON(res, 400, { error: 'invalid_json' });
   }
-  if (!['pendiente', 'confirmado', 'cancelado'].includes(body.estado)) {
+  if (!ESTADOS_VALIDOS.includes(body.estado)) {
     return sendJSON(res, 400, { error: 'estado_invalido' });
   }
   try {
     var result = await pool.query(
-      `UPDATE pedidos SET estado = $1 WHERE id = $2 AND business_id = $3`,
+      `UPDATE pedidos SET estado = $1 WHERE id = $2 AND business_id = $3 RETURNING session_id`,
       [body.estado, id, businessId]
     );
     if (result.rowCount === 0) return sendJSON(res, 404, { error: 'not_found' });
+
+    // Notificación WhatsApp al cliente si el pedido vino por WhatsApp (session_id "wa_...")
+    var sessionId = result.rows[0].session_id;
+    var msgCliente = WA_MENSAJES_ESTADO[body.estado];
+    if (twilioClient && msgCliente && sessionId && sessionId.startsWith('wa_')) {
+      var numero = sessionId.replace(/^wa_/, '');
+      var to = 'whatsapp:+' + numero;
+      twilioClient.messages.create({
+        from: TWILIO_WHATSAPP_FROM,
+        to:   to,
+        body: msgCliente
+      }).catch(function (e) {
+        console.error('[Twilio] Error notificando cliente:', e.message);
+      });
+    }
+
     sendJSON(res, 200, { ok: true, id: id, estado: body.estado });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
