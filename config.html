@@ -645,7 +645,7 @@ node -e "require('dotenv').config(); require('./proxy.js')"</div>
 (function () {
   'use strict';
 
-  var API = 'http://localhost:3001';
+  var API = window.location.origin;
   var BID = new URLSearchParams(location.search).get('businessId') || 'default';
 
   // ── Estado ────────────────────────────────────────────────────────────────
@@ -1009,7 +1009,7 @@ node -e "require('dotenv').config(); require('./proxy.js')"</div>
 
   function renderInstallSnippet() {
     var origin = window.location.origin.includes('file:')
-      ? 'http://localhost:3001'
+      ? window.location.origin
       : window.location.origin;
 
     var botNombre = document.getElementById('f-bot-nombre').value || 'Asistente';
