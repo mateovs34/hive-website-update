@@ -873,9 +873,33 @@
       .stat-label  { font-size: 9px; }
       .stat-sub    { font-size: 10px; }
 
-      /* Pedidos: single col */
-      .pedidos-main { grid-template-columns: 1fr; }
-      .p-section + .p-section { border-left: none; border-top: 1px solid var(--border); }
+      /* Pedidos: scroll vertical unificado */
+      #section-pedidos {
+        overflow-y: auto;   /* la sección entera scrollea como una */
+        overflow-x: hidden;
+      }
+      .pedidos-main {
+        display: block;     /* apilado vertical, altura natural */
+        flex: none;         /* no constrainar altura al padre */
+      }
+      .p-section {
+        overflow-y: visible !important;  /* sin scroll propio */
+        height: auto !important;
+        padding: 14px 12px;
+      }
+      .p-section + .p-section {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+
+      /* Filtros en columna */
+      .filter-bar       { flex-direction: column; align-items: stretch; gap: 6px; }
+      .filter-search    { width: 100%; min-width: 0; }
+      .filter-select    { width: 100%; }
+      .filter-date      { width: 100%; }
+      .filter-sep       { display: none; }
+      .prep-config      { width: 100%; justify-content: flex-start; }
+      .filter-clear     { width: 100%; text-align: center; }
 
       /* Section topbar */
       .section-topbar { padding: 0 14px; }
