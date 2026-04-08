@@ -441,7 +441,11 @@ function buildWhatsAppCustomerPrompt(cfg) {
     'PROHIBIDO: markdown, texto fuera del JSON, comentarios.\n\n' +
     'REGISTRO DE PEDIDO — solo cuando el cliente confirmó explícitamente, agregá el campo "pedido":\n' +
     '{"text":"¡Pedido registrado! ...","humanContact":false,"pedido":{"items":[{"nombre":"...","cantidad":1,"precio":"$..."}],"total":"$...","notas":""}}\n' +
-    'Si el pedido NO fue confirmado explícitamente por el cliente, NUNCA incluyas el campo "pedido".'
+    'Si el pedido NO fue confirmado explícitamente por el cliente, NUNCA incluyas el campo "pedido".\n\n' +
+    'AGRUPACIÓN DE ITEMS — cuando un producto lleva extras, salsas o agregados, registrarlo como UN SOLO item combinado:\n' +
+    '  CORRECTO:   {"nombre":"Ravioles con salsa 4 quesos","cantidad":1,"precio":"$1000"}\n' +
+    '  INCORRECTO: {"nombre":"Ravioles","cantidad":1,"precio":"$500"} + {"nombre":"Salsa 4 quesos","cantidad":1,"precio":"$500"}\n' +
+    'El precio del item agrupado es la suma de producto + extras. Solo crear items separados para productos independientes entre sí (ej: una pasta y una bebida van en items distintos).'
   );
 }
 
