@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — ChatWidget SaaS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:         #0a0d14;
+      --surface:    #111827;
+      --surface2:   #1a2235;
+      --border:     #1f2d42;
+      --border2:    #263548;
+      --text:       #e2e8f0;
+      --muted:      #64748b;
+      --muted2:     #475569;
+      --accent:     #6366f1;
+      --accent-h:   #4f46e5;
+      --accent-dim: rgba(99,102,241,0.12);
+      --green:      #22c55e;
+      --green-bg:   rgba(34,197,94,0.10);
+      --green-bdr:  rgba(34,197,94,0.25);
+      --red:        #ef4444;
+      --red-bg:     rgba(239,68,68,0.10);
+      --red-bdr:    rgba(239,68,68,0.25);
+      --yellow:     #f59e0b;
+      --yellow-bg:  rgba(245,158,11,0.10);
+      --yellow-bdr: rgba(245,158,11,0.25);
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px; line-height: 1.5; }
+
+    /* ── Header ──────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; height: 58px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+    .header-brand-icon { width: 32px; height: 32px; background: var(--accent);
+      border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .header-tag {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; background: var(--accent-dim);
+      color: var(--accent); border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 4px; padding: 2px 7px;
+    }
+
+    /* ── Buttons ──────────────────────────── */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+      border-radius: 8px; font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s; line-height: 1; font-family: inherit; }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+    .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-bdr); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+    /* ── Stats bar ────────────────────────── */
+    .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 14px; padding: 20px 28px; border-bottom: 1px solid var(--border); }
+    .stat-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px; }
+    .stat-label { font-size: 11px; color: var(--muted); font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Main ─────────────────────────────── */
+    .main { padding: 24px 28px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; }
+    .section-title { font-size: 15px; font-weight: 600; }
+
+    /* ── Negocio cards ────────────────────── */
+    .negocios-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px; }
+
+    .negocio-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .negocio-card:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    .negocio-card.inactive { opacity: 0.55; }
+
+    .negocio-card-top {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px 12px;
+    }
+    .negocio-avatar {
+      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+    }
+    .negocio-info { flex: 1; min-width: 0; }
+    .negocio-nombre { font-weight: 700; font-size: 15px; margin-bottom: 3px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .negocio-bid {
+      font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--muted); background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 1px 7px; display: inline-block;
+    }
+    .negocio-status { flex-shrink: 0; }
+    .status-dot-wrap { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+    .sdot { width: 7px; height: 7px; border-radius: 50%; }
+    .sdot.on  { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .sdot.off { background: var(--muted2); }
+
+    .negocio-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+    }
+    .nstat { padding: 11px 0; text-align: center; border-right: 1px solid var(--border); }
+    .nstat:last-child { border-right: none; }
+    .nstat-val { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .nstat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.04em; margin-top: 1px; }
+
+    .negocio-actions {
+      display: flex; gap: 8px; padding: 10px 14px;
+      border-top: 1px solid var(--border); flex-wrap: wrap;
+    }
+
+    /* ── Empty state ──────────────────────── */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+    .empty-sub { font-size: 13px; color: var(--muted2); margin-bottom: 20px; }
+
+    /* ── Modal ────────────────────────────── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(4px); z-index: 200;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal { background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 18px; width: 100%; max-width: 460px;
+      transform: translateY(12px) scale(0.98); transition: transform 0.2s;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6); }
+    .modal-overlay.open .modal { transform: translateY(0) scale(1); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 22px; border-bottom: 1px solid var(--border); }
+    .modal-title { font-weight: 700; font-size: 15px; }
+    .modal-close { width: 28px; height: 28px; border-radius: 7px; background: var(--surface2);
+      border: 1px solid var(--border); color: var(--muted); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.15s; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 22px; }
+    .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px; }
+
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--muted);
+      margin-bottom: 6px; letter-spacing: 0.02em; }
+    .field { width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px; padding: 9px 12px;
+      outline: none; transition: border-color 0.15s; font-family: inherit; }
+    .field:focus { border-color: var(--accent); }
+    .field::placeholder { color: var(--muted2); }
+    .field-hint { font-size: 11px; color: var(--muted2); margin-top: 5px; }
+    .form-row { margin-bottom: 16px; }
+    .field-error { border-color: var(--red) !important; }
+    .error-msg { font-size: 11px; color: var(--red); margin-top: 4px; }
+
+    /* slug preview */
+    .slug-preview { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .slug-chip { font-size: 12px; font-family: 'SF Mono','Fira Code',monospace;
+      background: var(--accent-dim); color: var(--accent);
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 5px; padding: 3px 9px; }
+
+    /* ── Confirm delete dialog ────────────── */
+    .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+      z-index: 300; display: flex; align-items: center; justify-content: center;
+      padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+    .confirm-overlay.open { opacity: 1; pointer-events: all; }
+    .confirm-box { background: var(--surface); border: 1px solid var(--red-bdr);
+      border-radius: 14px; padding: 24px; max-width: 380px; width: 100%;
+      box-shadow: 0 16px 60px rgba(0,0,0,0.7); }
+    .confirm-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+    .confirm-msg { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* ── Toast ────────────────────────────── */
+    .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--surface); border: 1px solid var(--border2); border-radius: 10px;
+      padding: 12px 20px; font-size: 13px; font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4); opacity: 0;
+      transition: opacity 0.2s, transform 0.2s; z-index: 999;
+      display: flex; align-items: center; gap: 8px; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.ok  { border-color: var(--green-bdr); color: var(--green); }
+    .toast.err { border-color: var(--red-bdr);   color: var(--red); }
+
+    /* ── Responsive ───────────────────────── */
+    @media (max-width: 768px) {
+      .stats-bar { grid-template-columns: repeat(2, 1fr); padding: 14px 16px; }
+      .main { padding: 16px; }
+      .header { padding: 0 16px; }
+      .negocios-grid { grid-template-columns: 1fr; }
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="header-brand-icon">⚡</div>
+    <span>ChatWidget</span>
+    <span class="header-tag">SaaS Admin</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <span id="refresh-time" style="font-size:12px;color:var(--muted)"></span>
+    <button class="btn btn-primary" onclick="openCreateModal()">+ Nuevo negocio</button>
+  </div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-label">Negocios activos</div>
+    <div class="stat-value" id="s-total">—</div>
+    <div class="stat-sub">clientes en la plataforma</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Pedidos hoy</div>
+    <div class="stat-value" id="s-pedidos-hoy">—</div>
+    <div class="stat-sub">todos los negocios</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Conversaciones</div>
+    <div class="stat-value" id="s-convs">—</div>
+    <div class="stat-sub">total histórico</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total pedidos</div>
+    <div class="stat-value" id="s-pedidos-total">—</div>
+    <div class="stat-sub">todos los negocios</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="section-header">
+    <span class="section-title">Negocios</span>
+    <span id="neg-count" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <div class="negocios-grid" id="negocios-grid"></div>
+</div>
+
+<!-- Modal crear negocio -->
+<div class="modal-overlay" id="modal-create" onclick="onOverlayClick(event,'modal-create')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Nuevo negocio</span>
+      <button class="modal-close" onclick="closeCreateModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Nombre del negocio *</label>
+        <input class="field" id="new-nombre" type="text" placeholder="Pizza Roma"
+               maxlength="100" oninput="onNombreInput(this.value)">
+        <div class="field-hint">Nombre visible para los clientes.</div>
+      </div>
+      <div class="form-row">
+        <label>Business ID *</label>
+        <input class="field" id="new-bid" type="text"
+               placeholder="pizzeria-roma"
+               maxlength="50"
+               oninput="onBidInput(this.value)">
+        <div class="field-hint">Solo minúsculas, números y guiones. Mínimo 3 caracteres. No se puede cambiar después.</div>
+        <div class="error-msg" id="bid-error" style="display:none"></div>
+        <div class="slug-preview">
+          <span style="font-size:11px;color:var(--muted)">Vista previa:</span>
+          <span class="slug-chip" id="slug-chip">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCreateModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-create" onclick="createNegocio()">Crear negocio</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm delete -->
+<div class="confirm-overlay" id="confirm-delete">
+  <div class="confirm-box">
+    <div class="confirm-title">⚠️ Eliminar negocio</div>
+    <div class="confirm-msg" id="confirm-msg">Esta acción eliminará el negocio y todos sus datos (conversaciones, mensajes, pedidos). Esta operación es irreversible.</div>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirm-delete" onclick="confirmDelete()">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = 'http://localhost:3001';
+  var negocios = [];
+  var pendingDeleteId = null;
+
+  // ── Utils ───────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function slugify(s) {
+    return s.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,'-')
+      .replace(/^-+|-+$/g,'')
+      .slice(0,50);
+  }
+
+  function timeAgo(iso) {
+    if (!iso) return '—';
+    var d   = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+    var sec = Math.floor((Date.now() - d) / 1000);
+    if (sec < 60)    return 'hace ' + sec + 's';
+    if (sec < 3600)  return 'hace ' + Math.floor(sec/60) + 'min';
+    if (sec < 86400) return 'hace ' + Math.floor(sec/3600) + 'h';
+    return 'hace '   + Math.floor(sec/86400) + 'd';
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────────────
+
+  var toastTimer;
+  function showToast(msg, type) {
+    var el = document.getElementById('toast');
+    clearTimeout(toastTimer);
+    el.textContent = (type === 'ok' ? '✓ ' : '✕ ') + msg;
+    el.className   = 'toast show ' + (type || '');
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
+  }
+
+  // ── Load & render ───────────────────────────────────────────────────────
+
+  function load() {
+    fetch(API + '/negocios')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        negocios = data;
+        renderStats();
+        renderNegocios();
+        document.getElementById('refresh-time').textContent =
+          'Actualizado ' + new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+      })
+      .catch(function () {
+        document.getElementById('negocios-grid').innerHTML =
+          '<div class="empty-state"><div class="empty-icon">⚠️</div>' +
+          '<div class="empty-title">No se pudo conectar</div>' +
+          '<div class="empty-sub">Verificá que el proxy esté corriendo en ' + API + '</div></div>';
+      });
+  }
+
+  function renderStats() {
+    var totalHoy   = negocios.reduce(function(a,n){ return a + (n.pedidos_hoy||0); }, 0);
+    var totalConvs = negocios.reduce(function(a,n){ return a + (n.total_conversaciones||0); }, 0);
+    var totalPed   = negocios.reduce(function(a,n){ return a + (n.total_pedidos||0); }, 0);
+    var activos    = negocios.filter(function(n){ return n.activo; }).length;
+
+    document.getElementById('s-total').textContent        = activos;
+    document.getElementById('s-pedidos-hoy').textContent  = totalHoy;
+    document.getElementById('s-convs').textContent        = totalConvs;
+    document.getElementById('s-pedidos-total').textContent= totalPed;
+    document.getElementById('neg-count').textContent      = negocios.length + ' negocios';
+  }
+
+  function renderNegocios() {
+    var grid = document.getElementById('negocios-grid');
+    if (negocios.length === 0) {
+      grid.innerHTML =
+        '<div class="empty-state" style="grid-column:1/-1">' +
+        '<div class="empty-icon">🏪</div>' +
+        '<div class="empty-title">Sin negocios todavía</div>' +
+        '<div class="empty-sub">Creá el primer negocio para empezar</div>' +
+        '<button class="btn btn-primary" onclick="openCreateModal()">+ Nuevo negocio</button></div>';
+      return;
+    }
+    grid.innerHTML = negocios.map(function(n) {
+      var isOn = n.activo;
+      return (
+        '<div class="negocio-card' + (isOn ? '' : ' inactive') + '">' +
+          '<div class="negocio-card-top">' +
+            '<div class="negocio-avatar" style="background:' + esc(n.color_widget || '#6366f1') + '33;border:1px solid ' + esc(n.color_widget || '#6366f1') + '44">' +
+              esc(n.bot_avatar || '🤖') +
+            '</div>' +
+            '<div class="negocio-info">' +
+              '<div class="negocio-nombre" title="' + esc(n.nombre) + '">' + esc(n.nombre) + '</div>' +
+              '<span class="negocio-bid">' + esc(n.business_id) + '</span>' +
+            '</div>' +
+            '<div class="negocio-status">' +
+              '<div class="status-dot-wrap">' +
+                '<div class="sdot ' + (isOn ? 'on' : 'off') + '"></div>' +
+                '<span>' + (isOn ? 'Activo' : 'Inactivo') + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="negocio-stats">' +
+            '<div class="nstat">' +
+              '<div class="nstat-val">' + (n.pedidos_hoy || 0) + '</div>' +
+              '<div class="nstat-lbl">Pedidos hoy</div>' +
+            '</div>' +
+            '<div class="nstat">' +
+              '<div class="nstat-val">' + (n.total_pedidos || 0) + '</div>' +
+              '<div class="nstat-lbl">Total pedidos</div>' +
+            '</div>' +
+            '<div class="nstat">' +
+              '<div class="nstat-val">' + (n.total_conversaciones || 0) + '</div>' +
+              '<div class="nstat-lbl">Conversaciones</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="negocio-actions">' +
+            '<a class="btn btn-ghost btn-sm" href="dashboard.html?businessId=' + encodeURIComponent(n.business_id) + '" target="_blank">📊 Dashboard</a>' +
+            '<a class="btn btn-ghost btn-sm" href="config.html?businessId='    + encodeURIComponent(n.business_id) + '" target="_blank">⚙️ Config</a>' +
+            '<button class="btn btn-ghost btn-sm" onclick="copySnippet(\'' + esc(n.business_id) + '\')">📋 Snippet</button>' +
+            '<button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="askDelete(\'' + esc(n.business_id) + '\',\'' + esc(n.nombre) + '\')">🗑️</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  // ── Copy snippet ────────────────────────────────────────────────────────
+
+  window.copySnippet = function(bid) {
+    var snippet =
+      '<script>\n' +
+      '  window.ChatWidgetConfig = {\n' +
+      '    businessId: \'' + bid + '\',\n' +
+      '    proxyUrl:   \'' + API + '/chat\'\n' +
+      '  };\n' +
+      '<\/script>\n' +
+      '<script src="' + API + '/widget.js"><\/script>';
+    navigator.clipboard.writeText(snippet)
+      .then(function () { showToast('Snippet copiado para ' + bid, 'ok'); })
+      .catch(function () { showToast('No se pudo copiar', 'err'); });
+  };
+
+  // ── Create modal ────────────────────────────────────────────────────────
+
+  window.openCreateModal = function() {
+    document.getElementById('new-nombre').value = '';
+    document.getElementById('new-bid').value    = '';
+    document.getElementById('slug-chip').textContent = '—';
+    document.getElementById('bid-error').style.display = 'none';
+    document.getElementById('modal-create').classList.add('open');
+    setTimeout(function(){ document.getElementById('new-nombre').focus(); }, 100);
+  };
+
+  window.closeCreateModal = function() {
+    document.getElementById('modal-create').classList.remove('open');
+  };
+
+  window.onOverlayClick = function(e, id) {
+    if (e.target === document.getElementById(id)) {
+      document.getElementById(id).classList.remove('open');
+    }
+  };
+
+  window.onNombreInput = function(val) {
+    var slug = slugify(val);
+    var bidField = document.getElementById('new-bid');
+    // Only auto-fill if user hasn't typed a custom bid
+    if (!bidField.dataset.edited) {
+      bidField.value = slug;
+      document.getElementById('slug-chip').textContent = slug || '—';
+    }
+  };
+
+  window.onBidInput = function(val) {
+    var field = document.getElementById('new-bid');
+    field.dataset.edited = val ? '1' : '';
+    var slug = slugify(val);
+    document.getElementById('slug-chip').textContent = slug || '—';
+    document.getElementById('bid-error').style.display = 'none';
+    field.classList.remove('field-error');
+  };
+
+  window.createNegocio = function() {
+    var nombre  = document.getElementById('new-nombre').value.trim();
+    var bidRaw  = document.getElementById('new-bid').value.trim();
+    var bid     = slugify(bidRaw);
+    var errEl   = document.getElementById('bid-error');
+    var bidField= document.getElementById('new-bid');
+
+    if (!nombre) {
+      document.getElementById('new-nombre').focus();
+      return;
+    }
+    if (!bid || bid.length < 3) {
+      errEl.textContent = 'El ID debe tener al menos 3 caracteres';
+      errEl.style.display = 'block';
+      bidField.classList.add('field-error');
+      return;
+    }
+
+    var btn = document.getElementById('btn-create');
+    btn.disabled = true;
+    btn.textContent = 'Creando…';
+
+    fetch(API + '/negocios', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ business_id: bid, nombre: nombre })
+    })
+      .then(function (r) { return r.json().then(function(d){ return {ok: r.ok, data: d}; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          errEl.textContent = res.data.error || 'Error al crear';
+          errEl.style.display = 'block';
+          bidField.classList.add('field-error');
+          return;
+        }
+        closeCreateModal();
+        showToast('Negocio "' + nombre + '" creado', 'ok');
+        load();
+      })
+      .catch(function () { showToast('Error de conexión', 'err'); })
+      .finally(function () { btn.disabled = false; btn.textContent = 'Crear negocio'; });
+  };
+
+  // ── Delete ──────────────────────────────────────────────────────────────
+
+  window.askDelete = function(bid, nombre) {
+    pendingDeleteId = bid;
+    document.getElementById('confirm-msg').textContent =
+      'Vas a eliminar "' + nombre + '" (' + bid + ') y todos sus datos (conversaciones, mensajes, pedidos). Esta operación es irreversible.';
+    document.getElementById('confirm-delete').classList.add('open');
+  };
+
+  window.closeConfirm = function() {
+    pendingDeleteId = null;
+    document.getElementById('confirm-delete').classList.remove('open');
+  };
+
+  window.confirmDelete = function() {
+    if (!pendingDeleteId) return;
+    var bid = pendingDeleteId;
+    var btn = document.getElementById('btn-confirm-delete');
+    btn.disabled = true;
+    btn.textContent = 'Eliminando…';
+
+    fetch(API + '/negocios/' + encodeURIComponent(bid), { method: 'DELETE' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeConfirm();
+        showToast('Negocio eliminado', 'ok');
+        load();
+      })
+      .catch(function () { showToast('Error al eliminar', 'err'); })
+      .finally(function () { btn.disabled = false; btn.textContent = 'Sí, eliminar'; });
+  };
+
+  // ── Keyboard ────────────────────────────────────────────────────────────
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      document.getElementById('modal-create').classList.remove('open');
+      document.getElementById('confirm-delete').classList.remove('open');
+    }
+    if (e.key === 'Enter' && document.getElementById('modal-create').classList.contains('open')) {
+      window.createNegocio();
+    }
+  });
+
+  // ── Bootstrap ────────────────────────────────────────────────────────────
+
+  load();
+  setInterval(load, 30000); // auto-refresh cada 30s
+
+})();
+</script>
+</body>
+</html>
