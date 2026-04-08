@@ -27,8 +27,11 @@ const jwt       = require('jsonwebtoken');
 const PORT           = process.env.PORT           || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DATABASE_URL   = process.env.DATABASE_URL;
-const SECRET_KEY     = process.env.SECRET_KEY     || 'changeme-in-production';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
+const SECRET_KEY           = process.env.SECRET_KEY           || 'changeme-in-production';
+const ADMIN_PASSWORD       = process.env.ADMIN_PASSWORD       || null;
+const TWILIO_ACCOUNT_SID   = process.env.TWILIO_ACCOUNT_SID   || null;
+const TWILIO_AUTH_TOKEN    = process.env.TWILIO_AUTH_TOKEN    || null;
+const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
 if (!OPENAI_API_KEY) {
   console.error('Error: falta la variable de entorno OPENAI_API_KEY');
@@ -40,6 +43,18 @@ if (!DATABASE_URL) {
 }
 if (SECRET_KEY === 'changeme-in-production') {
   console.warn('[Auth] ADVERTENCIA: usando SECRET_KEY por defecto. Configurá SECRET_KEY en producción.');
+}
+
+// ── Twilio ────────────────────────────────────────────────────────────────────
+
+var twilioClient = null;
+if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
+  try {
+    twilioClient = require('twilio')(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+    console.log('[Twilio] Cliente inicializado correctamente');
+  } catch (e) {
+    console.warn('[Twilio] No se pudo inicializar:', e.message);
+  }
 }
 
 // ── Base de datos ─────────────────────────────────────────────────────────────
@@ -277,6 +292,40 @@ async function saveMessage(businessId, sessionId, rol, contenido) {
   } catch (e) { console.error('[DB] saveMessage:', e.message); }
 }
 
+async function sendWhatsAppNotification(negocio, pedido) {
+  if (!twilioClient || !negocio.whatsapp) return;
+
+  var items = Array.isArray(pedido.items) ? pedido.items : [];
+  var itemsText = items.length
+    ? items.map(function (it) {
+        var line = '  • ';
+        if (it.cantidad) line += 'x' + it.cantidad + ' ';
+        line += (it.nombre || it.name || '?');
+        if (it.precio) line += ' — ' + it.precio;
+        return line;
+      }).join('\n')
+    : '  (sin detalle)';
+
+  var hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+  var body =
+    '🔔 Nuevo pedido en ' + negocio.nombre + '\n' +
+    '📋 ' + itemsText + '\n' +
+    '💰 Total: ' + (pedido.total || '—') + '\n' +
+    '🕐 ' + hora;
+
+  var to = negocio.whatsapp.startsWith('whatsapp:')
+    ? negocio.whatsapp
+    : 'whatsapp:' + negocio.whatsapp;
+
+  try {
+    await twilioClient.messages.create({ from: TWILIO_WHATSAPP_FROM, to: to, body: body });
+    console.log('[Twilio] WhatsApp enviado a', negocio.whatsapp, '— negocio:', negocio.business_id);
+  } catch (e) {
+    console.error('[Twilio] Error al enviar WhatsApp:', e.message);
+  }
+}
+
 async function savePedidoIfDetected(businessId, sessionId, parsed) {
   if (!parsed || !parsed.pedido) return;
   try {
@@ -286,6 +335,17 @@ async function savePedidoIfDetected(businessId, sessionId, parsed) {
       [businessId, sessionId, JSON.stringify(parsed.pedido)]
     );
     console.log('[DB] Pedido creado — negocio:', businessId, 'sesión:', sessionId);
+
+    // Notificación WhatsApp (fire-and-forget, no interrumpe el flujo)
+    if (twilioClient) {
+      pool.query(`SELECT nombre, whatsapp FROM negocios WHERE business_id = $1`, [businessId])
+        .then(function (r) {
+          if (r.rows.length && r.rows[0].whatsapp) {
+            sendWhatsAppNotification(r.rows[0], parsed.pedido);
+          }
+        })
+        .catch(function (e) { console.error('[Twilio] Error al obtener negocio:', e.message); });
+    }
   } catch (e) { console.error('[DB] savePedido:', e.message); }
 }
 
