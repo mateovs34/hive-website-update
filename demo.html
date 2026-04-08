@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pizza Roma — Demo Widget IA</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fff8f5;
+      color: #1a1a1a;
+    }
+
+    /* ── Aviso de seguridad ── */
+    .security-banner {
+      background: #fff3cd;
+      border-bottom: 2px solid #ffc107;
+      padding: 12px 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .security-banner strong { color: #856404; font-size: 14px; display: block; margin-bottom: 3px; }
+    .security-banner p { color: #664d03; }
+    .security-banner code {
+      background: rgba(0,0,0,0.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* ── Header / Nav ── */
+    header {
+      background: #E63946;
+      color: white;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+      box-shadow: 0 2px 12px rgba(230,57,70,0.3);
+    }
+    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo span { font-size: 26px; margin-right: 6px; }
+    nav { display: flex; gap: 28px; }
+    nav a { color: white; text-decoration: none; font-size: 14px; font-weight: 500; opacity: 0.88; transition: opacity 0.15s; }
+    nav a:hover { opacity: 1; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #E63946 0%, #c1121f 100%);
+      color: white;
+      padding: 72px 32px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 48px; font-weight: 900; margin-bottom: 16px; letter-spacing: -1px; }
+    .hero p { font-size: 18px; opacity: 0.92; max-width: 520px; margin: 0 auto 32px; line-height: 1.6; }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1.5px solid rgba(255,255,255,0.35);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: white;
+      color: #E63946;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 14px 32px;
+      border-radius: 50px;
+      text-decoration: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .hero-cta:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(0,0,0,0.25); }
+
+    /* ── Info rápida ── */
+    .quick-info {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      background: white;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .quick-info-item {
+      padding: 18px 32px;
+      text-align: center;
+      border-right: 1px solid #f0f0f0;
+      flex: 1;
+      max-width: 220px;
+    }
+    .quick-info-item:last-child { border-right: none; }
+    .quick-info-icon { font-size: 22px; margin-bottom: 4px; }
+    .quick-info-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
+    .quick-info-value { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-top: 2px; }
+
+    /* ── Sección menú ── */
+    .section { padding: 56px 32px; max-width: 1000px; margin: 0 auto; }
+    .section-title {
+      font-size: 30px; font-weight: 800;
+      margin-bottom: 8px;
+      color: #1a1a1a;
+    }
+    .section-subtitle { color: #666; font-size: 15px; margin-bottom: 36px; }
+
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .menu-card {
+      background: white;
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      transition: transform 0.15s, box-shadow 0.15s;
+      border: 1px solid #f5f5f5;
+    }
+    .menu-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+    .menu-card-emoji { font-size: 36px; margin-bottom: 12px; }
+    .menu-card-name { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+    .menu-card-desc { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 14px; }
+    .menu-card-prices { display: flex; gap: 10px; }
+    .price-tag {
+      background: #fff8f5;
+      border: 1.5px solid #fde8e8;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #E63946;
+    }
+    .price-tag span { font-size: 11px; color: #999; font-weight: 400; margin-left: 3px; }
+
+    /* ── Promos ── */
+    .promos-section { background: #fff8f5; padding: 56px 32px; }
+    .promos-inner { max-width: 1000px; margin: 0 auto; }
+    .promos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .promo-card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px 26px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border-left: 4px solid #E63946;
+    }
+    .promo-day { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #E63946; margin-bottom: 8px; }
+    .promo-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .promo-desc { font-size: 14px; color: #555; line-height: 1.5; }
+
+    /* ── Widget demo info ── */
+    .widget-info {
+      background: #f0f4ff;
+      border: 1.5px solid #c7d7fe;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin: 40px auto;
+      max-width: 1000px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .widget-info-icon { font-size: 28px; flex-shrink: 0; margin-top: 2px; }
+    .widget-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; color: #1e3a8a; }
+    .widget-info p { font-size: 14px; color: #374151; line-height: 1.6; }
+    .widget-info code {
+      background: #dbeafe;
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: #1e40af;
+    }
+
+    /* ── Footer ── */
+    footer {
+      background: #1a1a1a;
+      color: #aaa;
+      text-align: center;
+      padding: 32px;
+      font-size: 13px;
+    }
+    footer strong { color: white; }
+    footer .footer-links { display: flex; justify-content: center; gap: 24px; margin-top: 12px; }
+    footer a { color: #aaa; text-decoration: none; font-size: 13px; transition: color 0.15s; }
+    footer a:hover { color: white; }
+
+    @media (max-width: 680px) {
+      .hero h1 { font-size: 32px; }
+      .quick-info { flex-wrap: wrap; }
+      .quick-info-item { max-width: none; width: 50%; }
+      nav { display: none; }
+      .promos-grid { grid-template-columns: 1fr; }
+      .section { padding: 40px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Aviso file:// (se oculta si corre en HTTP) ── -->
+  <div id="file-protocol-banner" style="display:none; background:#fef2f2; border-bottom:2px solid #f87171; padding:12px 24px; display:flex; align-items:flex-start; gap:10px; font-size:13px; line-height:1.5;">
+    <span style="font-size:20px;flex-shrink:0">🚫</span>
+    <div>
+      <strong style="color:#991b1b; font-size:14px; display:block; margin-bottom:3px;">Abriste el archivo directo — el chat no va a funcionar</strong>
+      <p style="color:#7f1d1d;">
+        El browser bloquea requests a APIs externas cuando la página corre desde <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;">file://</code>.
+        Servila desde un servidor local: en la terminal, dentro de la carpeta del archivo, corré
+        <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;">npx serve .</code>
+        o <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;">python3 -m http.server</code>
+        y abrí <code style="background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:4px;font-size:12px;">http://localhost:3000</code> (o el puerto que indique).
+      </p>
+    </div>
+  </div>
+  <script>
+    if (location.protocol === 'file:') {
+      document.getElementById('file-protocol-banner').style.display = 'flex';
+    }
+  </script>
+
+  <!-- ── Aviso de seguridad (solo para demo) ── -->
+  <div class="security-banner">
+    <span style="font-size:20px;flex-shrink:0">⚠️</span>
+    <div>
+      <strong>Demo con proxy local — API key segura en el servidor</strong>
+      <p>
+        El widget llama a <code>localhost:3001/chat</code>. El proxy (<code>proxy.js</code>) maneja la API key.
+        Para correr: <code>OPENAI_API_KEY=sk-... node proxy.js</code> y servir la carpeta con <code>npx serve .</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo"><span>🍕</span>Pizza Roma</div>
+    <nav>
+      <a href="#">Menú</a>
+      <a href="#">Promos</a>
+      <a href="#">Reservas</a>
+      <a href="#">Nosotros</a>
+      <a href="#">Contacto</a>
+    </nav>
+  </header>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-badge">⭐ Mejor Pizza Buenos Aires 2019 & 2021</div>
+    <h1>La pizza artesanal<br>de Palermo</h1>
+    <p>Masa madre de fermentación lenta 48 horas.<br>Ingredientes importados de Italia. Desde 2008.</p>
+    <a href="#menu" class="hero-cta">Ver menú completo</a>
+  </section>
+
+  <!-- ── Info rápida ── -->
+  <div class="quick-info">
+    <div class="quick-info-item">
+      <div class="quick-info-icon">🕐</div>
+      <div class="quick-info-label">Horario</div>
+      <div class="quick-info-value">18:00 — 00:30</div>
+    </div>
+    <div class="quick-info-item">
+      <div class="quick-info-icon">📍</div>
+      <div class="quick-info-label">Dirección</div>
+      <div class="quick-info-value">Thames 1234, Palermo</div>
+    </div>
+    <div class="quick-info-item">
+      <div class="quick-info-icon">🛵</div>
+      <div class="quick-info-label">Delivery</div>
+      <div class="quick-info-value">Rappi & PedidosYa</div>
+    </div>
+    <div class="quick-info-item">
+      <div class="quick-info-icon">💳</div>
+      <div class="quick-info-label">Pagos</div>
+      <div class="quick-info-value">Todas las tarjetas</div>
+    </div>
+  </div>
+
+  <!-- ── Menú ── -->
+  <section class="section" id="menu">
+    <h2 class="section-title">Nuestras pizzas</h2>
+    <p class="section-subtitle">Todas las pizzas disponibles en tamaño personal y familiar</p>
+    <div class="menu-grid">
+      <div class="menu-card">
+        <div class="menu-card-emoji">🍅</div>
+        <div class="menu-card-name">Margherita Clásica</div>
+        <div class="menu-card-desc">Salsa de tomate San Marzano, muzzarella fior di latte, albahaca fresca.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$3.500 <span>personal</span></div>
+          <div class="price-tag">$6.200 <span>familiar</span></div>
+        </div>
+      </div>
+      <div class="menu-card">
+        <div class="menu-card-emoji">🧀</div>
+        <div class="menu-card-name">Cuatro Quesos</div>
+        <div class="menu-card-desc">Muzzarella, provolone, gorgonzola y parmesano reggiano importado.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$4.200 <span>personal</span></div>
+          <div class="price-tag">$7.500 <span>familiar</span></div>
+        </div>
+      </div>
+      <div class="menu-card">
+        <div class="menu-card-emoji">🫒</div>
+        <div class="menu-card-name">Napolitana</div>
+        <div class="menu-card-desc">Salsa de tomate, muzzarella, rodajas de tomate fresco, ajo y orégano.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$3.800 <span>personal</span></div>
+          <div class="price-tag">$6.800 <span>familiar</span></div>
+        </div>
+      </div>
+      <div class="menu-card">
+        <div class="menu-card-emoji">🌶</div>
+        <div class="menu-card-name">Calabresa</div>
+        <div class="menu-card-desc">Chorizo calabrés picante, muzzarella, cebollas caramelizadas.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$4.000 <span>personal</span></div>
+          <div class="price-tag">$7.200 <span>familiar</span></div>
+        </div>
+      </div>
+      <div class="menu-card">
+        <div class="menu-card-emoji">🧅</div>
+        <div class="menu-card-name">Fugazzeta</div>
+        <div class="menu-card-desc">Cebolla dulce en abundancia, muzzarella, aceite de oliva extra virgen.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$4.100 <span>personal</span></div>
+          <div class="price-tag">$7.300 <span>familiar</span></div>
+        </div>
+      </div>
+      <div class="menu-card" style="border: 2px solid #E63946;">
+        <div class="menu-card-emoji">⭐</div>
+        <div class="menu-card-name">Especial Roma</div>
+        <div class="menu-card-desc">Jamón cocido, hongos salteados, muzzarella, rúcula fresca y oliva. La firma de la casa.</div>
+        <div class="menu-card-prices">
+          <div class="price-tag">$4.800 <span>personal</span></div>
+          <div class="price-tag">$8.500 <span>familiar</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Promos ── -->
+  <div class="promos-section">
+    <div class="promos-inner">
+      <h2 class="section-title">Promos semanales</h2>
+      <p class="section-subtitle">Beneficios exclusivos según el día</p>
+      <div class="promos-grid">
+        <div class="promo-card">
+          <div class="promo-day">Martes</div>
+          <div class="promo-title">2×1 en pizzas personales</div>
+          <div class="promo-desc">Pedís una pizza personal y te damos otra del mismo precio. Válido para todas las variedades.</div>
+        </div>
+        <div class="promo-card">
+          <div class="promo-day">Jueves</div>
+          <div class="promo-title">Promo Familiar — $12.500</div>
+          <div class="promo-desc">Pizza familiar a elección + bebida 2L + postre (tiramisú, panacota o brownie). Todo incluido.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Info sobre el widget ── -->
+  <div class="widget-info">
+    <div class="widget-info-icon">🤖</div>
+    <div>
+      <h3>Probá el chat con IA — abajo a la derecha 👇</h3>
+      <p>
+        Este widget usa <strong>GPT-4o-mini</strong> con contexto completo de Pizza Roma.
+        Podés preguntar sobre el menú, horarios, reservas, precios, promos, o lo que quieras.
+        También podés escribir cosas como <em>"quiero hablar con alguien"</em> para ver la detección de
+        intención de contacto humano. El bot entiende lenguaje informal, errores de tipeo y preguntas vagas.
+        Para usar el widget en tu sitio, copiá <code>widget.js</code> y configurá
+        <code>window.ChatWidgetConfig</code> con tu contexto de negocio.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <p><strong>Pizza Roma</strong> — Thames 1234, Palermo CABA · (011) 4833-5555</p>
+    <div class="footer-links">
+      <a href="#">Menú</a>
+      <a href="#">Reservas</a>
+      <a href="#">Delivery</a>
+      <a href="#">Instagram</a>
+      <a href="#">WhatsApp</a>
+    </div>
+    <p style="margin-top: 16px; font-size: 12px; opacity: 0.6;">Demo generada con ChatWidget — widget de IA embebible</p>
+  </footer>
+
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!--  CONFIGURACIÓN DEL WIDGET — modificá esto     -->
+  <!-- ══════════════════════════════════════════════ -->
+  <script>
+    window.ChatWidgetConfig = {
+      // URL del proxy local (la API key vive en el servidor, no acá)
+      proxyUrl: 'http://localhost:3001/chat',
+
+      // Personalización del bot
+      botName: 'Roma Bot',
+      botAvatar: '🍕',
+      primaryColor: '#E63946',
+
+      // Contexto del negocio — texto libre, FAQ, menú, lo que sea
+      businessContext: `
+        Somos Pizza Roma, pizzería artesanal en Buenos Aires, Palermo Soho.
+        Fundada en 2008, ganamos el premio Mejor Pizza Buenos Aires en 2019 y 2021.
+        Usamos masa madre de fermentación lenta 48 horas e ingredientes importados de Italia.
+
+        MENÚ PRINCIPAL:
+        - Margherita clásica: $3.500 (personal) / $6.200 (familiar)
+        - Cuatro quesos: $4.200 / $7.500
+        - Napolitana: $3.800 / $6.800
+        - Calabresa (picante): $4.000 / $7.200
+        - Fugazzeta: $4.100 / $7.300
+        - Especial Roma (jamón, hongos, muzzarella, rúcula): $4.800 / $8.500
+
+        BEBIDAS: Coca-Cola, Sprite, agua mineral
+        - Lata 354ml: $800
+        - Botella 500ml: $1.200
+        - Botella 2L: $1.800
+
+        POSTRES:
+        - Tiramisú: $2.800
+        - Panacota con frutos rojos: $2.500
+        - Brownie con helado: $2.400
+
+        HORARIOS: Lunes a domingo, 18:00 a 00:30hs (sin excepción, incluyendo feriados)
+        DIRECCIÓN: Thames 1234, Palermo Soho, CABA (entre Honduras y El Salvador)
+        TELÉFONO: (011) 4833-5555
+        INSTAGRAM: @pizzaroma.ba
+
+        DELIVERY: Disponible por Rappi y PedidosYa. Tiempo estimado: 35-50 minutos.
+        No hacemos delivery propio.
+
+        RESERVAS: Solo por teléfono o WhatsApp. Mínimo 2 horas de anticipación.
+        Para grupos de más de 8 personas, llamar con 24 horas de anticipación.
+        No tomamos reservas por Instagram o por este chat.
+
+        PAGOS: Efectivo, Mercado Pago, todas las tarjetas de crédito y débito sin recargo.
+
+        ESTACIONAMIENTO: No tenemos estacionamiento propio, hay estacionamiento pago a media cuadra
+        en Honduras 1200.
+
+        OPCIONES ESPECIALES:
+        - Opción vegana: cualquier pizza con queso vegano disponible (+ $500 adicional)
+        - Sin gluten: no disponible, usamos harina de trigo en todas las masas
+        - Ingredientes extra a pedido: consultar al momento del pedido
+
+        PROMOS SEMANALES:
+        - Martes: 2×1 en pizzas personales (mismo sabor o diferente, a elección)
+        - Jueves "Promo Familiar": pizza familiar + bebida 2L + postre $12.500 todo incluido
+
+        PREGUNTAS FRECUENTES:
+        - ¿Hacen cumpleaños? Sí, para grupos. Consultar disponibilidad.
+        - ¿Tienen lugar para niños? Sí, somos pet friendly y family friendly.
+        - ¿Aceptan vales de almuerzo? No, solo los medios de pago listados.
+        - ¿La promo 2x1 aplica en delivery? No, solo en el local.
+      `,
+
+      // Mensaje de bienvenida
+      welcomeMessage: '¡Hola! Soy Roma Bot 🍕 ¿Te ayudo con el menú, los precios, una reserva o algo más?',
+
+      // Contacto humano — se muestra cuando el usuario quiere hablar con alguien
+      humanContact: {
+        email: 'hola@pizzaroma.com.ar',
+        whatsapp: '+5491133445566'
+      }
+    };
+  </script>
+
+  <!-- El widget se auto-inicializa al cargarse -->
+  <script src="widget.js"></script>
+
+</body>
+</html>

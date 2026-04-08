@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuración — ChatWidget</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b27;
+      --surface2:   #1c2333;
+      --border:     #21293b;
+      --border2:    #2a3347;
+      --text:       #e2e8f0;
+      --muted:      #64748b;
+      --muted2:     #475569;
+      --accent:     #6366f1;
+      --accent-h:   #4f46e5;
+      --accent-dim: rgba(99,102,241,0.12);
+      --green:      #22c55e;
+      --green-bg:   rgba(34,197,94,0.10);
+      --green-bdr:  rgba(34,197,94,0.25);
+      --red:        #ef4444;
+      --red-bg:     rgba(239,68,68,0.10);
+      --red-bdr:    rgba(239,68,68,0.25);
+      --yellow:     #f59e0b;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px; line-height: 1.5; }
+
+    /* ── Header ─────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; height: 56px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-brand { display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: 15px; }
+    .header-brand-icon { width: 30px; height: 30px; background: var(--accent);
+      border-radius: 8px; display: flex; align-items: center;
+      justify-content: center; font-size: 14px; }
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .save-status { font-size: 12px; color: var(--muted); transition: color 0.3s; }
+    .save-status.ok   { color: var(--green); }
+    .save-status.err  { color: var(--red); }
+
+    /* ── Buttons ────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; font-size: 13px;
+      font-weight: 500; border: none; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s; line-height: 1;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-ghost { background: none; border: 1px solid var(--border);
+      color: var(--muted); }
+    .btn-ghost:hover { border-color: var(--border2); color: var(--text); }
+    .btn-danger { background: var(--red-bg); color: var(--red);
+      border: 1px solid var(--red-bdr); }
+    .btn-danger:hover { opacity: 0.8; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+    /* ── Tabs bar ───────────────────────────── */
+    .tabs-bar {
+      display: flex; gap: 2px; padding: 0 28px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 13px 18px; font-size: 13px; font-weight: 500;
+      color: var(--muted); background: none; border: none;
+      border-bottom: 2px solid transparent; cursor: pointer;
+      transition: all 0.15s; font-family: inherit; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Content area ───────────────────────── */
+    .content { max-width: 780px; margin: 0 auto; padding: 32px 28px 64px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Form elements ──────────────────────── */
+    .form-section { margin-bottom: 32px; }
+    .form-section-title {
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 16px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .form-row { margin-bottom: 18px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+    label { display: block; font-size: 12px; font-weight: 500;
+      color: var(--muted); margin-bottom: 6px; letter-spacing: 0.02em; }
+    .field {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 14px;
+      padding: 9px 12px; outline: none; transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    .field:focus { border-color: var(--accent); }
+    .field::placeholder { color: var(--muted2); }
+    textarea.field { resize: vertical; min-height: 90px; line-height: 1.5; }
+    .field-hint { font-size: 11px; color: var(--muted2); margin-top: 5px; }
+
+    /* ── Menú items ─────────────────────────── */
+    .menu-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .menu-count { font-size: 12px; color: var(--muted); }
+    .menu-list { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Item display card */
+    .menu-item-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 11px; padding: 13px 15px;
+      display: flex; align-items: center; gap: 12px;
+      transition: border-color 0.15s;
+    }
+    .menu-item-card:hover { border-color: var(--border2); }
+    .item-emoji { font-size: 24px; flex-shrink: 0; width: 36px; text-align: center; }
+    .item-info { flex: 1; min-width: 0; }
+    .item-nombre { font-weight: 600; font-size: 14px; }
+    .item-meta { font-size: 12px; color: var(--muted); margin-top: 2px;
+      display: flex; gap: 8px; flex-wrap: wrap; }
+    .item-cat { background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 7px; font-size: 11px; }
+    .item-precio { color: var(--accent); font-weight: 500; }
+    .item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* Item edit card */
+    .menu-item-edit {
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 11px; padding: 16px;
+      box-shadow: 0 0 0 1px var(--accent-dim);
+    }
+    .edit-row-3 { display: grid; grid-template-columns: 80px 1fr 160px; gap: 10px; margin-bottom: 10px; }
+    .edit-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+    .emoji-field { font-size: 20px; text-align: center; }
+
+    .empty-menu {
+      text-align: center; padding: 40px 20px;
+      color: var(--muted); border: 1px dashed var(--border2);
+      border-radius: 12px;
+    }
+    .empty-menu-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+
+    /* ── Bot preview ────────────────────────── */
+    .bot-preview-wrap { display: grid; grid-template-columns: 1fr 280px; gap: 24px; }
+    .bot-preview {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .bot-preview-label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 4px; }
+    .preview-header {
+      border-radius: 12px; padding: 12px 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .preview-avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .preview-name { font-weight: 600; font-size: 14px; color: #fff; }
+    .preview-status { font-size: 11px; color: rgba(255,255,255,0.75);
+      display: flex; align-items: center; gap: 4px; }
+    .preview-dot { width: 6px; height: 6px; background: #4ade80;
+      border-radius: 50%; }
+    .preview-bubble {
+      align-self: flex-start; background: #f1f5f9; color: #1e293b;
+      border-radius: 14px; border-bottom-left-radius: 4px;
+      padding: 9px 13px; font-size: 13px; max-width: 100%;
+    }
+    .preview-launcher {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      align-self: flex-end;
+    }
+
+    /* Color picker row */
+    .color-row { display: flex; align-items: center; gap: 12px; }
+    .color-swatch {
+      width: 36px; height: 36px; border-radius: 8px; border: none;
+      cursor: pointer; padding: 0; overflow: hidden;
+    }
+    .color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+    .color-swatch::-webkit-color-swatch { border: none; border-radius: 6px; }
+    .color-hex { width: 100px; font-family: 'SF Mono', 'Fira Code', monospace; }
+    .color-presets { display: flex; gap: 6px; flex-wrap: wrap; }
+    .color-preset {
+      width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: transform 0.1s;
+    }
+    .color-preset:hover { transform: scale(1.15); }
+    .color-preset.selected { border-color: var(--text); }
+
+    /* ── Instalación ────────────────────────── */
+    .install-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; margin-bottom: 20px;
+    }
+    .install-card-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .install-card-title { font-weight: 600; font-size: 14px; }
+    .install-card-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .code-block {
+      background: #0d1117; padding: 18px 20px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.7; color: #e2e8f0;
+      overflow-x: auto; white-space: pre;
+    }
+    .code-comment { color: #64748b; }
+    .code-tag     { color: #f87171; }
+    .code-attr    { color: #93c5fd; }
+    .code-string  { color: #86efac; }
+    .copy-btn-wrap { padding: 12px 18px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; }
+
+    .install-note {
+      background: var(--accent-dim); border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 10px; padding: 14px 16px; font-size: 13px;
+      color: var(--text); line-height: 1.6; margin-bottom: 16px;
+    }
+    .install-note strong { color: var(--accent); }
+
+    /* ── Toast ──────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 12px 20px;
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      opacity: 0; transition: opacity 0.2s, transform 0.2s;
+      z-index: 999; display: flex; align-items: center; gap: 8px;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.ok  { border-color: var(--green-bdr); color: var(--green); }
+    .toast.err { border-color: var(--red-bdr);   color: var(--red); }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 700px) {
+      .form-row-2 { grid-template-columns: 1fr; }
+      .edit-row-3 { grid-template-columns: 1fr 1fr; }
+      .bot-preview-wrap { grid-template-columns: 1fr; }
+      .content { padding: 20px 16px 64px; }
+      .header { padding: 0 16px; }
+      .tabs-bar { padding: 0 16px; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-brand">
+    <div class="header-brand-icon">⚙️</div>
+    <span>Configuración del negocio</span>
+  </div>
+  <div class="header-actions">
+    <span class="save-status" id="save-status"></span>
+    <a href="dashboard.html" class="btn btn-ghost btn-sm" target="_blank">📊 Dashboard</a>
+    <button class="btn btn-primary" id="btn-save" onclick="saveConfig()">
+      <span id="btn-save-text">Guardar cambios</span>
+    </button>
+  </div>
+</div>
+
+<div class="tabs-bar">
+  <button class="tab-btn active" onclick="setTab('general')">🏪 General</button>
+  <button class="tab-btn"        onclick="setTab('menu')">🍽️ Menú</button>
+  <button class="tab-btn"        onclick="setTab('bot')">🤖 Bot & Widget</button>
+  <button class="tab-btn"        onclick="setTab('install')">🔌 Instalación</button>
+</div>
+
+<div class="content">
+
+  <!-- ── TAB GENERAL ── -->
+  <div class="tab-panel active" id="tab-general">
+
+    <div class="form-section">
+      <div class="form-section-title">Identidad del negocio</div>
+      <div class="form-row">
+        <label>Nombre del negocio</label>
+        <input class="field" id="f-nombre" type="text" placeholder="Pizza Roma" maxlength="100">
+      </div>
+      <div class="form-row">
+        <label>Descripción completa</label>
+        <textarea class="field" id="f-descripcion" rows="5"
+          placeholder="Describí tu negocio: historia, especialidades, propuesta de valor, preguntas frecuentes, políticas...&#10;&#10;El bot usa este texto como contexto para responder. Mientras más detallado, mejor."></textarea>
+        <div class="field-hint">Este texto es el contexto principal del bot. Incluí toda la info relevante: historia, políticas, FAQ, etc.</div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Datos de contacto y ubicación</div>
+      <div class="form-row-2">
+        <div>
+          <label>Dirección</label>
+          <input class="field" id="f-direccion" type="text" placeholder="Thames 1234, Palermo, CABA">
+        </div>
+        <div>
+          <label>Horarios</label>
+          <input class="field" id="f-horarios" type="text" placeholder="Lunes a domingo, 18:00 – 00:30">
+        </div>
+      </div>
+      <div class="form-row-2">
+        <div>
+          <label>Teléfono</label>
+          <input class="field" id="f-telefono" type="text" placeholder="(011) 4833-5555">
+        </div>
+        <div>
+          <label>Instagram / Web</label>
+          <input class="field" id="f-instagram" type="text" placeholder="@mi.negocio">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Contacto humano (para derivar consultas)</div>
+      <div class="form-row-2">
+        <div>
+          <label>Email de contacto</label>
+          <input class="field" id="f-email" type="email" placeholder="hola@minegocio.com">
+        </div>
+        <div>
+          <label>WhatsApp (con código de país)</label>
+          <input class="field" id="f-whatsapp" type="text" placeholder="+5491133445566">
+          <div class="field-hint">Se usa para el botón "Hablar con alguien"</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── TAB MENÚ ── -->
+  <div class="tab-panel" id="tab-menu">
+
+    <div class="menu-toolbar">
+      <span class="menu-count" id="menu-count">0 items</span>
+      <button class="btn btn-primary btn-sm" onclick="startAddItem()">+ Agregar item</button>
+    </div>
+
+    <div class="menu-list" id="menu-list"></div>
+
+  </div>
+
+  <!-- ── TAB BOT & WIDGET ── -->
+  <div class="tab-panel" id="tab-bot">
+
+    <div class="bot-preview-wrap">
+      <!-- Formulario -->
+      <div>
+        <div class="form-section">
+          <div class="form-section-title">Personalidad del bot</div>
+          <div class="form-row-2">
+            <div>
+              <label>Nombre del bot</label>
+              <input class="field" id="f-bot-nombre" type="text"
+                placeholder="Roma Bot" maxlength="50"
+                oninput="updatePreview()">
+            </div>
+            <div>
+              <label>Avatar (emoji)</label>
+              <input class="field" id="f-bot-avatar" type="text"
+                placeholder="🍕" maxlength="4"
+                style="font-size:20px; text-align:center;"
+                oninput="updatePreview()">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Mensaje de bienvenida</label>
+            <textarea class="field" id="f-welcome" rows="3"
+              placeholder="¡Hola! Soy Roma Bot 🍕 ¿Te ayudo con el menú, los precios o una reserva?"
+              maxlength="300"
+              oninput="updatePreview()"></textarea>
+            <div class="field-hint">Primera burbuja que ve el usuario al abrir el chat.</div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Apariencia del widget</div>
+          <div class="form-row">
+            <label>Color principal</label>
+            <div class="color-row" style="margin-bottom:12px">
+              <input class="color-swatch" id="f-color-picker" type="color"
+                value="#6366f1" oninput="onColorPicker(this.value)">
+              <input class="field color-hex" id="f-color-hex" type="text"
+                value="#6366f1" maxlength="7"
+                oninput="onColorHex(this.value)"
+                placeholder="#6366f1">
+            </div>
+            <div class="color-presets" id="color-presets"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div>
+        <div class="bot-preview-label">Vista previa</div>
+        <div class="bot-preview">
+          <div class="preview-header" id="preview-header" style="background:#6366f1">
+            <div class="preview-avatar" id="preview-avatar">🤖</div>
+            <div>
+              <div class="preview-name" id="preview-name">Asistente</div>
+              <div class="preview-status">
+                <div class="preview-dot"></div>
+                <span>En línea</span>
+              </div>
+            </div>
+          </div>
+          <div class="preview-bubble" id="preview-bubble">
+            ¡Hola! ¿En qué puedo ayudarte?
+          </div>
+          <div class="preview-launcher" id="preview-launcher" style="background:#6366f1">
+            <span id="preview-launcher-icon">🤖</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── TAB INSTALACIÓN ── -->
+  <div class="tab-panel" id="tab-install">
+
+    <div class="install-note">
+      <strong>¿Cómo funciona?</strong> Copiá el snippet de abajo y pegalo antes del
+      <code style="background:rgba(99,102,241,0.15);padding:1px 5px;border-radius:4px">&lt;/body&gt;</code>
+      de cualquier página web. El widget cargará la configuración automáticamente desde tu servidor.
+    </div>
+
+    <div class="install-card">
+      <div class="install-card-header">
+        <div>
+          <div class="install-card-title">Snippet de instalación</div>
+          <div class="install-card-sub">Pegá esto en el HTML de tu sitio web</div>
+        </div>
+      </div>
+      <div class="code-block" id="install-snippet"></div>
+      <div class="copy-btn-wrap">
+        <button class="btn btn-ghost btn-sm" onclick="copySnippet()">📋 Copiar código</button>
+      </div>
+    </div>
+
+    <div class="install-card">
+      <div class="install-card-header">
+        <div>
+          <div class="install-card-title">Levantar el servidor</div>
+          <div class="install-card-sub">Comandos para iniciar proxy.js</div>
+        </div>
+      </div>
+      <div class="code-block"><span class="code-comment"># Instalar dependencias (solo la primera vez)</span>
+npm install better-sqlite3
+
+<span class="code-comment"># Levantar el proxy</span>
+OPENAI_API_KEY=sk-... node proxy.js
+
+<span class="code-comment"># O con archivo .env (recomendado)</span>
+echo "OPENAI_API_KEY=sk-..." > .env
+node -e "require('dotenv').config(); require('./proxy.js')"</div>
+    </div>
+
+    <div class="install-card">
+      <div class="install-card-header">
+        <div>
+          <div class="install-card-title">Endpoints disponibles</div>
+          <div class="install-card-sub">API del servidor</div>
+        </div>
+      </div>
+      <div class="code-block" id="endpoints-list"></div>
+    </div>
+
+  </div>
+
+</div><!-- /content -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = 'http://localhost:3001';
+  var BID = new URLSearchParams(location.search).get('businessId') || 'default';
+
+  // ── Estado ────────────────────────────────────────────────────────────────
+
+  var S = {
+    menu:      [],          // array de items del menú
+    editingId: null,        // null | 'new' | item.id
+    dirty:     false
+  };
+
+  var CATEGORIAS = ['Pizzas', 'Pastas', 'Ensaladas', 'Entradas',
+                    'Bebidas', 'Postres', 'Especiales', 'Otro'];
+
+  var COLOR_PRESETS = [
+    '#6366f1','#ec4899','#f97316','#22c55e',
+    '#06b6d4','#8b5cf6','#e63946','#0ea5e9'
+  ];
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+
+  window.setTab = function (tab) {
+    document.querySelectorAll('.tab-panel').forEach(function (p) {
+      p.classList.toggle('active', p.id === 'tab-' + tab);
+    });
+    document.querySelectorAll('.tab-btn').forEach(function (b, i) {
+      var tabs = ['general','menu','bot','install'];
+      b.classList.toggle('active', tabs[i] === tab);
+    });
+    if (tab === 'install') renderInstallSnippet();
+  };
+
+  // ── Utils ─────────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function markDirty() {
+    S.dirty = true;
+    document.getElementById('save-status').textContent = 'Cambios sin guardar';
+    document.getElementById('save-status').className = 'save-status';
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+
+  var toastTimer;
+  function showToast(msg, type) {
+    var el = document.getElementById('toast');
+    clearTimeout(toastTimer);
+    el.textContent = (type === 'ok' ? '✓ ' : '✕ ') + msg;
+    el.className   = 'toast show ' + (type || '');
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
+  }
+
+  // ── API ───────────────────────────────────────────────────────────────────
+
+  function loadConfig() {
+    fetch(API + '/config?businessId=' + encodeURIComponent(BID))
+      .then(function (r) { return r.json(); })
+      .then(function (cfg) {
+        document.getElementById('f-nombre').value      = cfg.nombre       || '';
+        document.getElementById('f-descripcion').value = cfg.descripcion  || '';
+        document.getElementById('f-horarios').value    = cfg.horarios     || '';
+        document.getElementById('f-direccion').value   = cfg.direccion    || '';
+        document.getElementById('f-telefono').value    = cfg.telefono     || '';
+        document.getElementById('f-email').value       = cfg.email_contacto || '';
+        document.getElementById('f-whatsapp').value    = cfg.whatsapp     || '';
+        document.getElementById('f-bot-nombre').value  = cfg.bot_nombre   || '';
+        document.getElementById('f-bot-avatar').value  = cfg.bot_avatar   || '';
+        document.getElementById('f-welcome').value     = cfg.welcome_msg  || '';
+
+        var color = cfg.color_widget || '#6366f1';
+        document.getElementById('f-color-picker').value = color;
+        document.getElementById('f-color-hex').value    = color;
+
+        S.menu = Array.isArray(cfg.menu) ? cfg.menu : [];
+        renderMenu();
+        updatePreview();
+        updateColorPresets(color);
+      })
+      .catch(function () {
+        showToast('No se pudo conectar al servidor', 'err');
+      });
+  }
+
+  window.saveConfig = function () {
+    var btn  = document.getElementById('btn-save');
+    var text = document.getElementById('btn-save-text');
+    btn.disabled  = true;
+    text.textContent = 'Guardando…';
+
+    var color = document.getElementById('f-color-picker').value;
+    var body  = {
+      nombre:         document.getElementById('f-nombre').value.trim(),
+      descripcion:    document.getElementById('f-descripcion').value.trim(),
+      horarios:       document.getElementById('f-horarios').value.trim(),
+      direccion:      document.getElementById('f-direccion').value.trim(),
+      telefono:       document.getElementById('f-telefono').value.trim(),
+      email_contacto: document.getElementById('f-email').value.trim(),
+      whatsapp:       document.getElementById('f-whatsapp').value.trim(),
+      bot_nombre:     document.getElementById('f-bot-nombre').value.trim(),
+      bot_avatar:     document.getElementById('f-bot-avatar').value.trim(),
+      welcome_msg:    document.getElementById('f-welcome').value.trim(),
+      color_widget:   color,
+      menu:           S.menu
+    };
+
+    fetch(API + '/config?businessId=' + encodeURIComponent(BID), {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body)
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function () {
+        S.dirty = false;
+        var st = document.getElementById('save-status');
+        st.textContent = 'Guardado ✓';
+        st.className   = 'save-status ok';
+        showToast('Configuración guardada correctamente', 'ok');
+        setTimeout(function () {
+          st.textContent = '';
+          st.className   = 'save-status';
+        }, 4000);
+      })
+      .catch(function (e) {
+        showToast('Error al guardar: ' + e.message, 'err');
+        document.getElementById('save-status').textContent = 'Error al guardar';
+        document.getElementById('save-status').className = 'save-status err';
+      })
+      .finally(function () {
+        btn.disabled = false;
+        text.textContent = 'Guardar cambios';
+      });
+  };
+
+  // ── Menú CRUD ─────────────────────────────────────────────────────────────
+
+  function renderMenu() {
+    var list = document.getElementById('menu-list');
+    var count = document.getElementById('menu-count');
+    count.textContent = S.menu.length + (S.menu.length === 1 ? ' item' : ' items');
+
+    if (S.menu.length === 0 && S.editingId !== 'new') {
+      list.innerHTML = '<div class="empty-menu">' +
+        '<div class="empty-menu-icon">🍽️</div>' +
+        '<div style="font-size:14px;font-weight:500;color:var(--muted)">Sin items en el menú</div>' +
+        '<div style="font-size:12px;color:var(--muted2);margin-top:4px">Agregá el primer item para que el bot pueda responder sobre precios</div>' +
+        '</div>';
+      if (S.editingId === 'new') {
+        list.innerHTML = '';
+        list.appendChild(buildEditForm(null));
+      }
+      return;
+    }
+
+    list.innerHTML = '';
+    S.menu.forEach(function (item) {
+      if (S.editingId === item.id) {
+        list.appendChild(buildEditForm(item));
+      } else {
+        list.appendChild(buildDisplayCard(item));
+      }
+    });
+
+    if (S.editingId === 'new') {
+      list.appendChild(buildEditForm(null));
+    }
+  }
+
+  function buildDisplayCard(item) {
+    var div = document.createElement('div');
+    div.className = 'menu-item-card';
+    div.innerHTML =
+      '<div class="item-emoji">' + esc(item.emoji || '•') + '</div>' +
+      '<div class="item-info">' +
+        '<div class="item-nombre">' + esc(item.nombre) + '</div>' +
+        '<div class="item-meta">' +
+          (item.categoria ? '<span class="item-cat">' + esc(item.categoria) + '</span>' : '') +
+          (item.precio    ? '<span class="item-precio">' + esc(item.precio)  + '</span>' : '') +
+          (item.descripcion ? '<span style="color:var(--muted2)">' + esc(item.descripcion.slice(0,60)) + (item.descripcion.length > 60 ? '…' : '') + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="item-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="editItem(\'' + item.id + '\')">✏️ Editar</button>' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteItem(\'' + item.id + '\')">🗑️</button>' +
+      '</div>';
+    return div;
+  }
+
+  function buildEditForm(item) {
+    var isNew = !item;
+    var div = document.createElement('div');
+    div.className = 'menu-item-edit';
+
+    var catOptions = CATEGORIAS.map(function (c) {
+      return '<option value="' + c + '"' + (item && item.categoria === c ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+
+    div.innerHTML =
+      '<div class="edit-row-3">' +
+        '<div>' +
+          '<label>Emoji</label>' +
+          '<input class="field emoji-field" id="ei-emoji" type="text" maxlength="4"' +
+            ' value="' + esc(item ? item.emoji || '' : '') + '" placeholder="🍕">' +
+        '</div>' +
+        '<div>' +
+          '<label>Nombre del item *</label>' +
+          '<input class="field" id="ei-nombre" type="text" maxlength="100"' +
+            ' value="' + esc(item ? item.nombre || '' : '') + '" placeholder="Margherita Clásica">' +
+        '</div>' +
+        '<div>' +
+          '<label>Categoría</label>' +
+          '<select class="field" id="ei-categoria"><option value="">— Seleccionar —</option>' + catOptions + '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div class="edit-row-2">' +
+        '<div>' +
+          '<label>Precio</label>' +
+          '<input class="field" id="ei-precio" type="text" maxlength="100"' +
+            ' value="' + esc(item ? item.precio || '' : '') + '" placeholder="$3.500 (personal) / $6.200 (familiar)">' +
+        '</div>' +
+        '<div>' +
+          '<label>Descripción breve</label>' +
+          '<input class="field" id="ei-descripcion" type="text" maxlength="200"' +
+            ' value="' + esc(item ? item.descripcion || '' : '') + '" placeholder="Salsa de tomate, muzzarella...">' +
+        '</div>' +
+      '</div>' +
+      '<div class="edit-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="cancelEdit()">Cancelar</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="confirmEdit(\'' + (item ? item.id : 'new') + '\')">' +
+          (isNew ? '+ Agregar' : '✓ Guardar') +
+        '</button>' +
+      '</div>';
+    return div;
+  }
+
+  window.startAddItem = function () {
+    S.editingId = 'new';
+    renderMenu();
+    // Scroll to form
+    var list = document.getElementById('menu-list');
+    setTimeout(function () {
+      var last = list.lastElementChild;
+      if (last) last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  };
+
+  window.editItem = function (id) {
+    S.editingId = id;
+    renderMenu();
+  };
+
+  window.deleteItem = function (id) {
+    S.menu = S.menu.filter(function (it) { return it.id !== id; });
+    if (S.editingId === id) S.editingId = null;
+    markDirty();
+    renderMenu();
+  };
+
+  window.cancelEdit = function () {
+    S.editingId = null;
+    renderMenu();
+  };
+
+  window.confirmEdit = function (idOrNew) {
+    var nombre = document.getElementById('ei-nombre').value.trim();
+    if (!nombre) {
+      document.getElementById('ei-nombre').focus();
+      document.getElementById('ei-nombre').style.borderColor = 'var(--red)';
+      setTimeout(function () {
+        document.getElementById('ei-nombre').style.borderColor = '';
+      }, 1500);
+      return;
+    }
+    var updated = {
+      id:          idOrNew === 'new' ? uid() : idOrNew,
+      emoji:       document.getElementById('ei-emoji').value.trim()       || '•',
+      nombre:      nombre,
+      categoria:   document.getElementById('ei-categoria').value,
+      precio:      document.getElementById('ei-precio').value.trim(),
+      descripcion: document.getElementById('ei-descripcion').value.trim()
+    };
+    if (idOrNew === 'new') {
+      S.menu.push(updated);
+    } else {
+      S.menu = S.menu.map(function (it) { return it.id === idOrNew ? updated : it; });
+    }
+    S.editingId = null;
+    markDirty();
+    renderMenu();
+  };
+
+  // ── Color picker ──────────────────────────────────────────────────────────
+
+  function buildColorPresets() {
+    var wrap = document.getElementById('color-presets');
+    wrap.innerHTML = COLOR_PRESETS.map(function (c) {
+      return '<div class="color-preset" style="background:' + c + '" title="' + c + '"' +
+        ' onclick="applyColor(\'' + c + '\')"></div>';
+    }).join('');
+  }
+
+  function updateColorPresets(current) {
+    document.querySelectorAll('.color-preset').forEach(function (el) {
+      el.classList.toggle('selected', el.title === current);
+    });
+  }
+
+  function applyColor(hex) {
+    document.getElementById('f-color-picker').value = hex;
+    document.getElementById('f-color-hex').value    = hex;
+    updatePreview();
+    updateColorPresets(hex);
+    markDirty();
+  }
+
+  window.applyColor = applyColor;
+
+  window.onColorPicker = function (v) {
+    document.getElementById('f-color-hex').value = v;
+    updatePreview();
+    updateColorPresets(v);
+    markDirty();
+  };
+
+  window.onColorHex = function (v) {
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+      document.getElementById('f-color-picker').value = v;
+      updatePreview();
+      updateColorPresets(v);
+      markDirty();
+    }
+  };
+
+  // ── Preview live ──────────────────────────────────────────────────────────
+
+  window.updatePreview = function () {
+    var name    = document.getElementById('f-bot-nombre').value || 'Asistente';
+    var avatar  = document.getElementById('f-bot-avatar').value || '🤖';
+    var welcome = document.getElementById('f-welcome').value    || '¡Hola! ¿En qué puedo ayudarte?';
+    var color   = document.getElementById('f-color-picker').value || '#6366f1';
+
+    document.getElementById('preview-name').textContent   = name;
+    document.getElementById('preview-avatar').textContent = avatar;
+    document.getElementById('preview-bubble').textContent = welcome;
+    document.getElementById('preview-launcher-icon').textContent = avatar;
+    document.getElementById('preview-header').style.background   = color;
+    document.getElementById('preview-launcher').style.background = color;
+  };
+
+  // ── Install snippet ───────────────────────────────────────────────────────
+
+  function renderInstallSnippet() {
+    var origin = window.location.origin.includes('file:')
+      ? 'http://localhost:3001'
+      : window.location.origin;
+
+    var botNombre = document.getElementById('f-bot-nombre').value || 'Asistente';
+    var botAvatar = document.getElementById('f-bot-avatar').value || '🤖';
+    var color     = document.getElementById('f-color-picker').value || '#6366f1';
+    var welcome   = document.getElementById('f-welcome').value || '¡Hola! ¿En qué puedo ayudarte?';
+
+    var snippet =
+      '<span class="code-comment">&lt;!-- Widget de Chat IA — pegá esto antes del &lt;/body&gt; --&gt;</span>\n' +
+      '<span class="code-tag">&lt;script&gt;</span>\n' +
+      '  window.ChatWidgetConfig = {\n' +
+      '    <span class="code-attr">proxyUrl</span>:      <span class="code-string">\'' + origin + '/chat\'</span>,\n' +
+      '    <span class="code-attr">botName</span>:       <span class="code-string">\'' + botNombre.replace(/'/g,"\\'") + '\'</span>,\n' +
+      '    <span class="code-attr">botAvatar</span>:     <span class="code-string">\'' + botAvatar.replace(/'/g,"\\'") + '\'</span>,\n' +
+      '    <span class="code-attr">primaryColor</span>:  <span class="code-string">\'' + color + '\'</span>,\n' +
+      '    <span class="code-attr">welcomeMessage</span>: <span class="code-string">\'' + welcome.slice(0,60).replace(/'/g,"\\'") + (welcome.length > 60 ? '…' : '') + '\'</span>\n' +
+      '  };\n' +
+      '<span class="code-tag">&lt;/script&gt;</span>\n' +
+      '<span class="code-tag">&lt;script</span> <span class="code-attr">src</span>=<span class="code-string">"' + origin + '/widget.js"</span><span class="code-tag">&gt;&lt;/script&gt;</span>';
+
+    document.getElementById('install-snippet').innerHTML = snippet;
+
+    var endpoints =
+      'GET  ' + origin + '/config          → Configuración del negocio\n' +
+      'PUT  ' + origin + '/config          → Actualizar configuración\n' +
+      'POST ' + origin + '/chat            → Enviar mensaje al bot\n' +
+      'GET  ' + origin + '/pedidos         → Listar pedidos\n' +
+      'PATCH ' + origin + '/pedidos/:id    → Actualizar estado de pedido\n' +
+      'GET  ' + origin + '/conversaciones  → Listar sesiones\n' +
+      'GET  ' + origin + '/conversaciones/:id → Mensajes de una sesión';
+
+    document.getElementById('endpoints-list').textContent = endpoints;
+  }
+
+  window.copySnippet = function () {
+    var code = document.getElementById('install-snippet').innerText;
+    navigator.clipboard.writeText(code)
+      .then(function () { showToast('Código copiado al portapapeles', 'ok'); })
+      .catch(function () { showToast('No se pudo copiar (usá Ctrl+C)', 'err'); });
+  };
+
+  // ── Marcar dirty en cambios de campos generales ───────────────────────────
+
+  ['f-nombre','f-descripcion','f-horarios','f-direccion','f-telefono',
+   'f-email','f-whatsapp','f-bot-nombre','f-bot-avatar','f-welcome']
+    .forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', markDirty);
+    });
+
+  // Advertir si hay cambios sin guardar
+  window.addEventListener('beforeunload', function (e) {
+    if (S.dirty) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
+
+  var bidEl = document.getElementById('header-bid');
+  if (bidEl) bidEl.textContent = BID;
+  buildColorPresets();
+  loadConfig();
+
+})();
+</script>
+</body>
+</html>

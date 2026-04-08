@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  proxy:
+    build: .
+    container_name: restaurant-widget
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=3001
+      - DB_PATH=/data/chat.db
+      - NODE_ENV=production
+    volumes:
+      # Persist SQLite database across restarts/deploys
+      - db_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  db_data:
+    driver: local
