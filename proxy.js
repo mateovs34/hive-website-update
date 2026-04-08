@@ -459,6 +459,46 @@ function forwardToOpenAI(messages, businessId, sessionId, res) {
   proxyReq.end();
 }
 
+// ── callOpenAI (async, retorna el contenido como string) ─────────────────────
+
+function callOpenAI(messages, jsonMode) {
+  return new Promise(function (resolve, reject) {
+    var payload = JSON.stringify({
+      model:           'gpt-4o-mini',
+      messages:        messages,
+      max_tokens:      500,
+      temperature:     0.7,
+      response_format: jsonMode ? { type: 'json_object' } : undefined
+    });
+
+    var options = {
+      hostname: 'api.openai.com',
+      path:     '/v1/chat/completions',
+      method:   'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Authorization':  'Bearer ' + OPENAI_API_KEY,
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+
+    var proxyReq = https.request(options, function (proxyRes) {
+      var chunks = [];
+      proxyRes.on('data', function (c) { chunks.push(c); });
+      proxyRes.on('end', function () {
+        try {
+          var data    = JSON.parse(Buffer.concat(chunks).toString());
+          var content = data.choices[0].message.content;
+          resolve(content);
+        } catch (e) { reject(e); }
+      });
+    });
+    proxyReq.on('error', reject);
+    proxyReq.write(payload);
+    proxyReq.end();
+  });
+}
+
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
 // GET /negocios
@@ -781,6 +821,140 @@ function handleVerify(req, res) {
   });
 }
 
+// ── WhatsApp webhook ──────────────────────────────────────────────────────────
+
+async function handleWhatsAppWebhook(req, res) {
+  var raw    = await readBody(req);
+  var params = new URLSearchParams(raw);
+  var from   = params.get('From') || '';   // whatsapp:+549...
+  var body   = params.get('Body') || '';
+
+  function twimlReply(text) {
+    var safe = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    var xml = '<?xml version="1.0" encoding="UTF-8"?><Response><Message>' + safe + '</Message></Response>';
+    res.writeHead(200, { 'Content-Type': 'text/xml' });
+    res.end(xml);
+  }
+
+  if (!from || !body.trim()) {
+    return twimlReply('Mensaje no válido.');
+  }
+
+  var senderPhone = from.replace(/^whatsapp:/i, '').trim();
+  var u           = parseUrl(req);
+  var businessId  = u.businessId || 'default';
+
+  var negResult = await pool.query(
+    `SELECT * FROM negocios WHERE business_id = $1`,
+    [businessId]
+  );
+  if (negResult.rows.length === 0) {
+    return twimlReply('Negocio no encontrado.');
+  }
+
+  var negocio    = negResult.rows[0];
+  var ownerPhone = (negocio.whatsapp || '').replace(/^whatsapp:/i, '').trim();
+  var isOwner    = ownerPhone && ownerPhone === senderPhone;
+
+  // ── Flujo dueño: métricas + GPT ────────────────────────────────────────────
+  if (isOwner) {
+    try {
+      var metricsResult = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE) AS pedidos_hoy,
+          COUNT(*) FILTER (WHERE estado = 'pendiente')           AS pedidos_pendientes,
+          COUNT(*)                                               AS total_pedidos,
+          (SELECT json_agg(sub) FROM (
+            SELECT detalles, estado, creado_en FROM pedidos
+            WHERE business_id = $1
+            ORDER BY creado_en DESC LIMIT 5
+          ) sub) AS ultimos_pedidos
+        FROM pedidos
+        WHERE business_id = $1
+      `, [businessId]);
+
+      var m       = metricsResult.rows[0];
+      var ultimos = m.ultimos_pedidos || [];
+
+      var ultimosText = ultimos.length
+        ? ultimos.map(function (p) {
+            var d; try { d = JSON.parse(p.detalles); } catch (_) { d = {}; }
+            var items = Array.isArray(d.items)
+              ? d.items.map(function (i) { return i.nombre; }).join(', ')
+              : '?';
+            var hora = new Date(p.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+            return '  • [' + p.estado + '] ' + items + ' (' + hora + ')';
+          }).join('\n')
+        : '  (sin pedidos aún)';
+
+      var systemPrompt =
+        'Eres el asistente del propietario de ' + negocio.nombre + '. ' +
+        'El dueño te consulta por WhatsApp sobre su negocio. ' +
+        'Respondé en texto plano (sin markdown), máximo 3 oraciones, directo y claro.\n\n' +
+        'DATOS ACTUALES:\n' +
+        'Pedidos hoy: ' + (m.pedidos_hoy || 0) + '\n' +
+        'Pendientes: ' + (m.pedidos_pendientes || 0) + '\n' +
+        'Total histórico: ' + (m.total_pedidos || 0) + '\n' +
+        'Últimos 5 pedidos:\n' + ultimosText;
+
+      var ownerMessages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user',   content: body.trim()  }
+      ];
+
+      var reply = await callOpenAI(ownerMessages, false);
+      return twimlReply(reply.trim());
+    } catch (e) {
+      console.error('[Webhook] Error flujo dueño:', e.message);
+      return twimlReply('Error al consultar los datos. Intentá de nuevo.');
+    }
+  }
+
+  // ── Flujo cliente: chatbot normal ───────────────────────────────────────────
+  try {
+    var sessionId = 'wa_' + senderPhone.replace(/[^0-9]/g, '');
+
+    await ensureSession(businessId, sessionId);
+
+    // Historial reciente (últimos 10 mensajes, en orden cronológico)
+    var histResult = await pool.query(`
+      SELECT rol, contenido FROM mensajes
+      WHERE session_id = $1
+      ORDER BY creado_en DESC LIMIT 10
+    `, [sessionId]);
+    var history = histResult.rows.reverse().map(function (r) {
+      return { role: r.rol, content: r.contenido };
+    });
+
+    // Guardar mensaje del usuario
+    await saveMessage(businessId, sessionId, 'user', body.trim());
+
+    // Construir mensajes para GPT con system prompt del negocio
+    var chatMessages = injectSystemPrompt(
+      history.concat([{ role: 'user', content: body.trim() }]),
+      negocio
+    );
+
+    var replyContent = await callOpenAI(chatMessages, true);
+
+    var parsed;
+    try { parsed = JSON.parse(replyContent); } catch (_) { parsed = { text: replyContent }; }
+    var replyText = (parsed && parsed.text) ? parsed.text : replyContent;
+
+    // Guardar respuesta y detectar pedido (fire-and-forget)
+    saveMessage(businessId, sessionId, 'assistant', replyContent).catch(function () {});
+    savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
+
+    return twimlReply(replyText);
+  } catch (e) {
+    console.error('[Webhook] Error flujo cliente:', e.message);
+    return twimlReply('Lo siento, hubo un error. Intentá de nuevo en un momento.');
+  }
+}
+
 // ── Static file server ────────────────────────────────────────────────────────
 
 var STATIC_FILES = {
@@ -951,6 +1125,18 @@ var server = http.createServer(function (req, res) {
     if (!verifyToken(req)) return sendUnauthorized(res);
     return handleGetMensajes(decodeURIComponent(convMatch[1]), res)
       .catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // ── Twilio webhook (público — validado por Twilio) ────────────────────────
+
+  // POST /whatsapp/webhook?businessId=xxx
+  if (req.method === 'POST' && u.path === '/whatsapp/webhook') {
+    return handleWhatsAppWebhook(req, res).catch(function (e) {
+      console.error('[Webhook] Error inesperado:', e.message);
+      var xml = '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Error interno. Intentá más tarde.</Message></Response>';
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(xml);
+    });
   }
 
   res.writeHead(404); res.end();
