@@ -1278,9 +1278,22 @@ function showToast(msg, type) {
 
 function getToken() { return localStorage.getItem('chat_token') || ''; }
 
+// Decodifica el payload del JWT sin verificar firma (solo lectura en cliente)
+function getTokenPayload() {
+  var token = getToken();
+  if (!token) return null;
+  try {
+    var b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(b64));
+  } catch (_) { return null; }
+}
+
 function apiFetch(url, opts) {
+  // Siempre usa el businessId del JWT como fuente de verdad, nunca la variable global stale
+  var payload   = getTokenPayload();
+  var activeBid = (payload && payload.businessId) || BID;
   var sep  = url.includes('?') ? '&' : '?';
-  var full = API + url + sep + 'businessId=' + encodeURIComponent(BID);
+  var full = API + url + sep + 'businessId=' + encodeURIComponent(activeBid);
   opts = opts || {};
   opts.headers = Object.assign({ 'Authorization': 'Bearer ' + getToken() }, opts.headers || {});
   return fetch(full, opts).then(function (r) {
@@ -1297,18 +1310,43 @@ function showAuthOverlay() {
 
 window.logout = function () {
   localStorage.removeItem('chat_token');
+  // Resetear BID y estado global para que no queden datos del negocio anterior
+  BID = '';
+  _configLoaded = false;
+  var titleEl = document.getElementById('sidebar-title');
+  var bidEl   = document.getElementById('sidebar-bid');
+  if (titleEl) titleEl.textContent = 'ChatWidget';
+  if (bidEl)   bidEl.textContent   = '—';
+  window._stopDashboard  && window._stopDashboard();
+  window._resetDashboard && window._resetDashboard();
+  window._resetConfig    && window._resetConfig();
   showAuthOverlay();
 };
 
 function onAuthSuccess(token, businessId) {
   localStorage.setItem('chat_token', token);
-  if (businessId && businessId !== BID) {
-    BID = businessId;
-    document.getElementById('sidebar-bid').textContent = BID;
-    var u = new URL(window.location.href);
-    u.searchParams.set('businessId', businessId);
-    window.history.replaceState(null, '', u.toString());
-  }
+
+  // Limpiar todo el estado del negocio anterior antes de cargar el nuevo
+  _configLoaded = false;
+  window._resetDashboard && window._resetDashboard();
+  window._resetConfig    && window._resetConfig();
+
+  // Derivar businessId del JWT (fuente de verdad), con fallback al parámetro del servidor
+  var payload = null;
+  try {
+    var b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    payload = JSON.parse(atob(b64));
+  } catch (_) {}
+  var newBid = (payload && payload.businessId) || businessId || BID;
+
+  // Actualizar BID y UI siempre, independientemente de si cambió o no
+  BID = newBid;
+  var bidEl = document.getElementById('sidebar-bid');
+  if (bidEl) bidEl.textContent = BID;
+  var u = new URL(window.location.href);
+  u.searchParams.set('businessId', BID);
+  window.history.replaceState(null, '', u.toString());
+
   document.getElementById('auth-overlay').classList.add('hidden');
   window._startDashboard && window._startDashboard();
 }
@@ -1956,11 +1994,35 @@ document.getElementById('sidebar-bid').textContent = BID;
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
+  var _pollInterval = null;
+  var _tickInterval = null;
+
+  window._stopDashboard = function () {
+    if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+    if (_tickInterval) { clearInterval(_tickInterval); _tickInterval = null; }
+  };
+
+  window._resetDashboard = function () {
+    DS.pedidos        = [];
+    DS.conversaciones = [];
+    DS.pedidoSig      = {};
+    DS.convSig        = {};
+    DS.knownIds       = new Set();
+    DS.firstLoad      = true;
+    DS.activeConv     = null;
+    var ordersList = document.getElementById('orders-list');
+    if (ordersList) ordersList.innerHTML = '';
+    var convList = document.getElementById('conv-list');
+    if (convList) convList.innerHTML = '';
+    setStatus('error');
+  };
+
   updateMuteBtn();
   window._startDashboard = function () {
+    window._stopDashboard(); // cancelar intervals anteriores antes de crear nuevos
     poll();
-    setInterval(poll,      POLL_MS);
-    setInterval(tickTimes, 15000);
+    _pollInterval = setInterval(poll,      POLL_MS);
+    _tickInterval = setInterval(tickTimes, 15000);
   };
 
 })();
@@ -2516,6 +2578,18 @@ document.getElementById('sidebar-bid').textContent = BID;
   window.addEventListener('beforeunload', function (e) {
     if (CS.dirty) { e.preventDefault(); e.returnValue = ''; }
   });
+
+  window._resetConfig = function () {
+    CS.menu      = [];
+    CS.editingId = null;
+    CS.dirty     = false;
+    ['f-nombre','f-descripcion','f-horarios','f-direccion','f-telefono',
+     'f-email','f-whatsapp','f-bot-nombre','f-bot-avatar','f-welcome']
+      .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+    renderMenu();
+    var st = document.getElementById('save-status');
+    if (st) { st.textContent = ''; st.className = 'save-status'; }
+  };
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
