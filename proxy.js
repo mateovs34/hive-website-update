@@ -1160,7 +1160,9 @@ var STATIC_FILES = {
   '/dashboard.html':{ file: 'dashboard.html',  mime: 'text/html' },
   '/config.html':   { file: 'config.html',     mime: 'text/html' },
   '/demo.html':     { file: 'demo.html',       mime: 'text/html' },
-  '/widget.js':     { file: 'widget.js',       mime: 'application/javascript' }
+  '/widget.js':     { file: 'widget.js',       mime: 'application/javascript' },
+  '/tour.html':     { file: 'tour.html',       mime: 'text/html' },
+  '/tour':          { file: 'tour.html',       mime: 'text/html' }
 };
 
 function serveStatic(res, entry) {
