@@ -207,6 +207,47 @@
     }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ── Auth overlay ── */
+    .auth-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .auth-overlay.hidden { display: none; }
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 20px; padding: 36px 32px; width: 100%; max-width: 380px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .auth-logo {
+      width: 52px; height: 52px; background: var(--accent);
+      border-radius: 14px; display: flex; align-items: center;
+      justify-content: center; font-size: 26px; margin-bottom: 12px;
+    }
+    .auth-title    { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .auth-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+    .auth-form { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+    .auth-field-group { width: 100%; }
+    .auth-field-group label {
+      display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px;
+    }
+    .auth-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 9px; color: var(--text); font-size: 14px; padding: 10px 13px;
+      outline: none; transition: border-color 0.15s; font-family: inherit;
+    }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-input::placeholder { color: var(--muted2); }
+    .auth-error { font-size: 12px; color: var(--red); min-height: 18px; text-align: center; width: 100%; }
+    .auth-btn {
+      width: 100%; padding: 11px; border: none; border-radius: 9px;
+      background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; font-family: inherit;
+    }
+    .auth-btn:hover { background: var(--accent-h); }
+    .auth-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -220,6 +261,7 @@
   <div style="display:flex;gap:10px;align-items:center">
     <span id="refresh-time" style="font-size:12px;color:var(--muted)"></span>
     <button class="btn btn-primary" onclick="openCreateModal()">+ Nuevo negocio</button>
+    <button class="btn btn-ghost" onclick="adminLogout()" style="font-size:12px">↩ Salir</button>
   </div>
 </header>
 
@@ -301,6 +343,25 @@
   </div>
 </div>
 
+<!-- ── Admin auth overlay ─────────────────────────────────────────────────── -->
+<div id="admin-auth-overlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo">⚡</div>
+    <div class="auth-title">ChatWidget</div>
+    <div class="auth-subtitle">Panel de administración</div>
+    <div class="auth-form">
+      <div class="auth-field-group">
+        <label>Contraseña de administrador</label>
+        <input class="auth-input" id="admin-password-input" type="password" placeholder="••••••••"
+               autocomplete="current-password"
+               onkeydown="if(event.key==='Enter') doAdminLogin()">
+      </div>
+      <div class="auth-error" id="admin-auth-error"></div>
+      <button class="auth-btn" id="admin-login-btn" onclick="doAdminLogin()">Acceder</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -311,6 +372,68 @@
   var API = window.location.origin;
   var negocios = [];
   var pendingDeleteId = null;
+
+  // ── Auth ─────────────────────────────────────────────────────────────────
+
+  function getAdminToken() { return localStorage.getItem('admin_token') || ''; }
+
+  function adminFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({ 'Authorization': 'Bearer ' + getAdminToken() }, opts.headers || {});
+    return fetch(API + url, opts).then(function (r) {
+      if (r.status === 401) { showAdminLogin(); throw new Error('Unauthorized'); }
+      return r;
+    });
+  }
+
+  function showAdminLogin() {
+    document.getElementById('admin-auth-overlay').classList.remove('hidden');
+  }
+
+  window.adminLogout = function () {
+    localStorage.removeItem('admin_token');
+    showAdminLogin();
+  };
+
+  window.doAdminLogin = function () {
+    var pass  = document.getElementById('admin-password-input').value;
+    var errEl = document.getElementById('admin-auth-error');
+    var btn   = document.getElementById('admin-login-btn');
+    if (!pass) { errEl.textContent = 'Ingresá la contraseña'; return; }
+    btn.disabled = true; btn.textContent = 'Verificando…';
+    fetch(API + '/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body:   JSON.stringify({ password: pass })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok || res.data.role !== 'admin') {
+          errEl.textContent = res.data.error || 'Contraseña incorrecta';
+          return;
+        }
+        localStorage.setItem('admin_token', res.data.token);
+        document.getElementById('admin-auth-overlay').classList.add('hidden');
+        load();
+      })
+      .catch(function () { errEl.textContent = 'Error de conexión'; })
+      .finally(function () { btn.disabled = false; btn.textContent = 'Acceder'; });
+  };
+
+  // Check auth on load
+  (function checkAdminAuth() {
+    var token = getAdminToken();
+    if (!token) { showAdminLogin(); return; }
+    fetch(API + '/auth/verify', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function (r) {
+        if (!r.ok) { showAdminLogin(); return; }
+        r.json().then(function (d) {
+          if (!d.valid || d.role !== 'admin') { showAdminLogin(); }
+          else { document.getElementById('admin-auth-overlay').classList.add('hidden'); load(); }
+        });
+      })
+      .catch(function () {
+        document.getElementById('admin-auth-overlay').classList.add('hidden'); load();
+      });
+  })();
 
   // ── Utils ───────────────────────────────────────────────────────────────
 
@@ -352,7 +475,7 @@
   // ── Load & render ───────────────────────────────────────────────────────
 
   function load() {
-    fetch(API + '/negocios')
+    adminFetch('/negocios')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         negocios = data;
@@ -517,7 +640,7 @@
     btn.disabled = true;
     btn.textContent = 'Creando…';
 
-    fetch(API + '/negocios', {
+    adminFetch('/negocios', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ business_id: bid, nombre: nombre })
@@ -559,7 +682,7 @@
     btn.disabled = true;
     btn.textContent = 'Eliminando…';
 
-    fetch(API + '/negocios/' + encodeURIComponent(bid), { method: 'DELETE' })
+    adminFetch('/negocios/' + encodeURIComponent(bid), { method: 'DELETE' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         closeConfirm();
@@ -583,9 +706,8 @@
   });
 
   // ── Bootstrap ────────────────────────────────────────────────────────────
-
-  load();
-  setInterval(load, 30000); // auto-refresh cada 30s
+  // load() es invocado por checkAdminAuth() luego de verificar el token.
+  setInterval(function () { if (getAdminToken()) load(); }, 30000);
 
 })();
 </script>

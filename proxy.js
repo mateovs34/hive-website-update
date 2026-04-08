@@ -21,10 +21,14 @@ const https    = require('https');
 const fs       = require('fs');
 const path     = require('path');
 const { Pool } = require('pg');
+const bcrypt    = require('bcryptjs');
+const jwt       = require('jsonwebtoken');
 
-const PORT           = process.env.PORT || 3001;
+const PORT           = process.env.PORT           || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DATABASE_URL   = process.env.DATABASE_URL;
+const SECRET_KEY     = process.env.SECRET_KEY     || 'changeme-in-production';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
 
 if (!OPENAI_API_KEY) {
   console.error('Error: falta la variable de entorno OPENAI_API_KEY');
@@ -33,6 +37,9 @@ if (!OPENAI_API_KEY) {
 if (!DATABASE_URL) {
   console.error('Error: falta la variable de entorno DATABASE_URL');
   process.exit(1);
+}
+if (SECRET_KEY === 'changeme-in-production') {
+  console.warn('[Auth] ADVERTENCIA: usando SECRET_KEY por defecto. Configurá SECRET_KEY en producción.');
 }
 
 // ── Base de datos ─────────────────────────────────────────────────────────────
@@ -97,6 +104,9 @@ async function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_pedidos_business ON pedidos(business_id);
   `);
 
+  // Agregar password_hash si la tabla ya existía sin esa columna
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
     INSERT INTO negocios (business_id, nombre)
@@ -139,6 +149,31 @@ function parseUrl(req) {
     path:       parsed.pathname,
     businessId: parsed.searchParams.get('businessId') || null
   };
+}
+
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+
+function verifyToken(req) {
+  var header = req.headers['authorization'] || '';
+  var token  = header.startsWith('Bearer ') ? header.slice(7).trim() : null;
+  if (!token) return null;
+  try { return jwt.verify(token, SECRET_KEY); }
+  catch (_) { return null; }
+}
+
+function isAdmin(req) {
+  var p = verifyToken(req);
+  return !!(p && p.role === 'admin');
+}
+
+function isBusiness(req, businessId) {
+  var p = verifyToken(req);
+  if (!p) return false;
+  return p.role === 'admin' || p.businessId === businessId;
+}
+
+function sendUnauthorized(res) {
+  sendJSON(res, 401, { error: 'unauthorized' });
 }
 
 // ── Persistencia — chat ───────────────────────────────────────────────────────
@@ -508,6 +543,84 @@ async function handleGetMensajes(sessionId, res) {
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
+// ── Auth handlers ─────────────────────────────────────────────────────────────
+
+// POST /auth/register
+async function handleRegister(res, raw) {
+  var body;
+  try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var bid    = String(body.businessId || body.business_id || '').toLowerCase()
+                 .replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  var nombre = String(body.nombre || 'Mi Negocio').slice(0, 100);
+  var pass   = String(body.password || '');
+  if (!bid || bid.length < 3 || bid.length > 50) {
+    return sendJSON(res, 400, { error: 'businessId inválido (3-50 caracteres: letras, números, guiones)' });
+  }
+  if (pass.length < 6) {
+    return sendJSON(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
+  }
+  try {
+    var hash  = await bcrypt.hash(pass, 10);
+    await pool.query(
+      `INSERT INTO negocios (business_id, nombre, password_hash) VALUES ($1, $2, $3)`,
+      [bid, nombre, hash]
+    );
+    var token = jwt.sign({ businessId: bid, role: 'business' }, SECRET_KEY, { expiresIn: '7d' });
+    sendJSON(res, 201, { ok: true, token: token, businessId: bid, nombre: nombre });
+  } catch (e) {
+    if (e.code === '23505') return sendJSON(res, 409, { error: 'El business_id ya existe' });
+    sendJSON(res, 500, { error: e.message });
+  }
+}
+
+// POST /auth/login
+async function handleLogin(res, raw) {
+  var body;
+  try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var pass = String(body.password || '');
+
+  // Admin login (sin businessId)
+  if (!body.businessId) {
+    if (!ADMIN_PASSWORD) return sendJSON(res, 403, { error: 'Admin no configurado (falta ADMIN_PASSWORD)' });
+    if (pass !== ADMIN_PASSWORD) return sendJSON(res, 401, { error: 'Contraseña incorrecta' });
+    var tok = jwt.sign({ role: 'admin' }, SECRET_KEY, { expiresIn: '24h' });
+    return sendJSON(res, 200, { ok: true, token: tok, role: 'admin' });
+  }
+
+  // Business login
+  var bid = String(body.businessId).toLowerCase().trim();
+  try {
+    var result = await pool.query(
+      `SELECT business_id, nombre, password_hash FROM negocios WHERE business_id = $1`,
+      [bid]
+    );
+    if (result.rows.length === 0) return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    var row = result.rows[0];
+    if (!row.password_hash) return sendJSON(res, 401, { error: 'Este negocio no tiene contraseña configurada' });
+    var valid = await bcrypt.compare(pass, row.password_hash);
+    if (!valid) return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    var token = jwt.sign({ businessId: bid, role: 'business' }, SECRET_KEY, { expiresIn: '7d' });
+    sendJSON(res, 200, { ok: true, token: token, businessId: bid, nombre: row.nombre });
+  } catch (e) {
+    sendJSON(res, 500, { error: e.message });
+  }
+}
+
+// GET /auth/verify
+function handleVerify(req, res) {
+  var payload = verifyToken(req);
+  if (!payload) return sendJSON(res, 401, { error: 'Token inválido o expirado' });
+  sendJSON(res, 200, {
+    valid:      true,
+    businessId: payload.businessId || null,
+    role:       payload.role || 'business'
+  });
+}
+
 // ── Static file server ────────────────────────────────────────────────────────
 
 var STATIC_FILES = {
@@ -552,13 +665,33 @@ var server = http.createServer(function (req, res) {
     return;
   }
 
+  // ── Auth endpoints (públicos) ─────────────────────────────────────────────
+
+  if (req.method === 'POST' && u.path === '/auth/register') {
+    return readBody(req).then(function (r) { return handleRegister(res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  if (req.method === 'POST' && u.path === '/auth/login') {
+    return readBody(req).then(function (r) { return handleLogin(res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  if (req.method === 'GET' && u.path === '/auth/verify') {
+    return handleVerify(req, res);
+  }
+
+  // ── Admin endpoints (requieren rol admin) ─────────────────────────────────
+
   // GET /negocios
   if (req.method === 'GET' && u.path === '/negocios') {
+    if (!isAdmin(req)) return sendUnauthorized(res);
     return handleGetNegocios(res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
   // POST /negocios
   if (req.method === 'POST' && u.path === '/negocios') {
+    if (!isAdmin(req)) return sendUnauthorized(res);
     return readBody(req).then(function (r) { return handleCreateNegocio(res, r); })
       .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
   }
@@ -566,26 +699,18 @@ var server = http.createServer(function (req, res) {
   // DELETE /negocios/:businessId
   var negMatch = u.path.match(/^\/negocios\/([^/]+)$/);
   if (req.method === 'DELETE' && negMatch) {
+    if (!isAdmin(req)) return sendUnauthorized(res);
     return handleDeleteNegocio(negMatch[1], res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
-  // GET /widget-config?businessId=xxx
+  // ── Endpoints públicos del widget ─────────────────────────────────────────
+
+  // GET /widget-config?businessId=xxx  (público — lo usa el widget)
   if (req.method === 'GET' && u.path === '/widget-config') {
     return handleGetWidgetConfig(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
-  // GET /config?businessId=xxx
-  if (req.method === 'GET' && u.path === '/config') {
-    return handleGetConfig(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
-  }
-
-  // PUT /config?businessId=xxx
-  if (req.method === 'PUT' && u.path === '/config') {
-    return readBody(req).then(function (r) { return handlePutConfig(bid, res, r); })
-      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
-  }
-
-  // POST /chat  (businessId viene en el body)
+  // POST /chat  (público — lo usa el widget)
   if (req.method === 'POST' && u.path === '/chat') {
     return readBody(req).then(async function (raw) {
       var body; try { body = JSON.parse(raw); } catch (_) {
@@ -615,14 +740,31 @@ var server = http.createServer(function (req, res) {
     }).catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
   }
 
+  // ── Endpoints de negocio (requieren JWT del propietario) ──────────────────
+
+  // GET /config?businessId=xxx
+  if (req.method === 'GET' && u.path === '/config') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleGetConfig(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // PUT /config?businessId=xxx
+  if (req.method === 'PUT' && u.path === '/config') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handlePutConfig(bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
   // GET /pedidos?businessId=xxx
   if (req.method === 'GET' && u.path === '/pedidos') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
     return handleGetPedidos(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
   // PATCH /pedidos/:id?businessId=xxx
   var pedMatch = u.path.match(/^\/pedidos\/(\d+)$/);
   if (req.method === 'PATCH' && pedMatch) {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
     var pedId = parseInt(pedMatch[1], 10);
     return readBody(req).then(function (r) { return handlePatchPedido(pedId, bid, res, r); })
       .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
@@ -630,12 +772,14 @@ var server = http.createServer(function (req, res) {
 
   // GET /conversaciones?businessId=xxx
   if (req.method === 'GET' && u.path === '/conversaciones') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
     return handleGetConversaciones(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
-  // GET /conversaciones/:sessionId?businessId=xxx
+  // GET /conversaciones/:sessionId
   var convMatch = u.path.match(/^\/conversaciones\/([^/]+)$/);
   if (req.method === 'GET' && convMatch) {
+    if (!verifyToken(req)) return sendUnauthorized(res);
     return handleGetMensajes(decodeURIComponent(convMatch[1]), res)
       .catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }

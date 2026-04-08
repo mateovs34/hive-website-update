@@ -703,6 +703,72 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
+    /* ── Auth overlay ──────────────────────────────────────────────────────── */
+
+    .auth-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .auth-overlay.hidden { display: none; }
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 20px; padding: 36px 32px; width: 100%; max-width: 400px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .auth-logo {
+      width: 52px; height: 52px; background: var(--accent);
+      border-radius: 14px; display: flex; align-items: center;
+      justify-content: center; font-size: 26px; margin-bottom: 12px;
+    }
+    .auth-title  { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .auth-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    .auth-tabs {
+      display: flex; width: 100%; background: var(--surface2);
+      border-radius: 10px; padding: 3px; gap: 2px; margin-bottom: 20px;
+    }
+    .auth-tab {
+      flex: 1; padding: 8px; border-radius: 8px; border: none;
+      background: none; color: var(--muted); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s; font-family: inherit;
+    }
+    .auth-tab.active {
+      background: var(--surface); color: var(--text);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .auth-form { width: 100%; display: flex; flex-direction: column; gap: 14px; }
+    .auth-field-group { width: 100%; }
+    .auth-field-group label {
+      display: block; font-size: 12px; font-weight: 500;
+      color: var(--muted); margin-bottom: 6px;
+    }
+    .auth-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 9px; color: var(--text); font-size: 14px; padding: 10px 13px;
+      outline: none; transition: border-color 0.15s; font-family: inherit;
+    }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-input::placeholder { color: var(--muted2); }
+    .auth-hint { font-size: 11px; color: var(--muted2); margin-top: 4px; }
+    .auth-error { font-size: 12px; color: var(--red); min-height: 18px; text-align: center; width: 100%; }
+    .auth-btn {
+      width: 100%; padding: 11px; border: none; border-radius: 9px;
+      background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, transform 0.1s; font-family: inherit;
+    }
+    .auth-btn:hover  { background: var(--accent-h); }
+    .auth-btn:active { transform: scale(0.98); }
+    .auth-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .logout-btn {
+      margin-top: 8px; width: 100%; height: 30px;
+      background: none; border: 1px solid var(--border);
+      border-radius: 7px; color: var(--muted); font-size: 12px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; gap: 6px; font-family: inherit;
+    }
+    .logout-btn:hover { border-color: var(--red-bdr); color: var(--red); }
+
     /* ── Responsive ─────────────────────────────── */
 
     @media (max-width: 1100px) {
@@ -755,6 +821,7 @@
       </div>
       <div id="last-updated"></div>
       <button class="mute-btn" id="mute-btn" onclick="toggleMute()">🔔 Sonido activo</button>
+      <button class="logout-btn" onclick="logout()">↩ Cerrar sesión</button>
     </div>
   </aside>
 
@@ -1129,6 +1196,59 @@ docker compose up --build -d</div>
   </div>
 </div>
 
+<!-- ── Auth overlay ──────────────────────────────────────────────────────── -->
+<div id="auth-overlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo">💬</div>
+    <div class="auth-title">ChatWidget</div>
+    <div class="auth-subtitle">Panel de gestión</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login-btn" onclick="switchAuthTab('login')">Iniciar sesión</button>
+      <button class="auth-tab"        id="tab-reg-btn"   onclick="switchAuthTab('register')">Crear cuenta</button>
+    </div>
+
+    <!-- Login -->
+    <div class="auth-form" id="auth-login-form">
+      <div class="auth-field-group">
+        <label>Business ID</label>
+        <input class="auth-input" id="auth-bid-login" type="text" placeholder="mi-negocio" autocomplete="username">
+      </div>
+      <div class="auth-field-group">
+        <label>Contraseña</label>
+        <input class="auth-input" id="auth-pass-login" type="password" placeholder="••••••••" autocomplete="current-password"
+               onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <div class="auth-error" id="auth-login-error"></div>
+      <button class="auth-btn" id="auth-login-btn" onclick="doLogin()">Iniciar sesión</button>
+    </div>
+
+    <!-- Register -->
+    <div class="auth-form" id="auth-register-form" style="display:none">
+      <div class="auth-field-group">
+        <label>Business ID</label>
+        <input class="auth-input" id="auth-bid-reg" type="text" placeholder="mi-negocio" autocomplete="username">
+        <div class="auth-hint">Solo letras, números y guiones. No se puede cambiar después.</div>
+      </div>
+      <div class="auth-field-group">
+        <label>Nombre del negocio</label>
+        <input class="auth-input" id="auth-nombre-reg" type="text" placeholder="Pizza Roma">
+      </div>
+      <div class="auth-field-group">
+        <label>Contraseña <span style="color:var(--muted2)">(mínimo 6 caracteres)</span></label>
+        <input class="auth-input" id="auth-pass-reg" type="password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="auth-field-group">
+        <label>Confirmar contraseña</label>
+        <input class="auth-input" id="auth-pass-confirm" type="password" placeholder="••••••••"
+               onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+      <div class="auth-error" id="auth-register-error"></div>
+      <button class="auth-btn" id="auth-register-btn" onclick="doRegister()">Crear cuenta</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ─────────────────────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
@@ -1154,14 +1274,98 @@ function showToast(msg, type) {
   _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
 }
 
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+function getToken() { return localStorage.getItem('chat_token') || ''; }
+
 function apiFetch(url, opts) {
   var sep  = url.includes('?') ? '&' : '?';
   var full = API + url + sep + 'businessId=' + encodeURIComponent(BID);
+  opts = opts || {};
+  opts.headers = Object.assign({ 'Authorization': 'Bearer ' + getToken() }, opts.headers || {});
   return fetch(full, opts).then(function (r) {
+    if (r.status === 401) { showAuthOverlay(); throw new Error('Unauthorized'); }
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   });
 }
+
+function showAuthOverlay() {
+  var el = document.getElementById('auth-overlay');
+  if (el) el.classList.remove('hidden');
+}
+
+window.logout = function () {
+  localStorage.removeItem('chat_token');
+  showAuthOverlay();
+};
+
+function onAuthSuccess(token, businessId) {
+  localStorage.setItem('chat_token', token);
+  if (businessId && businessId !== BID) {
+    BID = businessId;
+    document.getElementById('sidebar-bid').textContent = BID;
+    var u = new URL(window.location.href);
+    u.searchParams.set('businessId', businessId);
+    window.history.replaceState(null, '', u.toString());
+  }
+  document.getElementById('auth-overlay').classList.add('hidden');
+  window._startDashboard && window._startDashboard();
+}
+
+window.switchAuthTab = function (tab) {
+  var isLogin = tab === 'login';
+  document.getElementById('tab-login-btn').classList.toggle('active', isLogin);
+  document.getElementById('tab-reg-btn').classList.toggle('active', !isLogin);
+  document.getElementById('auth-login-form').style.display    = isLogin ? '' : 'none';
+  document.getElementById('auth-register-form').style.display = isLogin ? 'none' : '';
+  document.getElementById('auth-login-error').textContent    = '';
+  document.getElementById('auth-register-error').textContent = '';
+};
+
+window.doLogin = function () {
+  var bid   = (document.getElementById('auth-bid-login').value || '').trim().toLowerCase();
+  var pass  = document.getElementById('auth-pass-login').value;
+  var errEl = document.getElementById('auth-login-error');
+  var btn   = document.getElementById('auth-login-btn');
+  if (!bid || !pass) { errEl.textContent = 'Completá todos los campos'; return; }
+  btn.disabled = true; btn.textContent = 'Iniciando…';
+  fetch(API + '/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ businessId: bid, password: pass })
+  }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.data.error || 'Error al iniciar sesión'; return; }
+      onAuthSuccess(res.data.token, res.data.businessId);
+    })
+    .catch(function () { errEl.textContent = 'Error de conexión'; })
+    .finally(function () { btn.disabled = false; btn.textContent = 'Iniciar sesión'; });
+};
+
+window.doRegister = function () {
+  var bid     = (document.getElementById('auth-bid-reg').value || '').trim().toLowerCase()
+                  .replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  var nombre  = (document.getElementById('auth-nombre-reg').value || '').trim();
+  var pass    = document.getElementById('auth-pass-reg').value;
+  var confirm = document.getElementById('auth-pass-confirm').value;
+  var errEl   = document.getElementById('auth-register-error');
+  var btn     = document.getElementById('auth-register-btn');
+  if (!bid || bid.length < 3) { errEl.textContent = 'Business ID debe tener al menos 3 caracteres'; return; }
+  if (!nombre)                 { errEl.textContent = 'Ingresá el nombre del negocio'; return; }
+  if (pass.length < 6)         { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (pass !== confirm)        { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  btn.disabled = true; btn.textContent = 'Creando cuenta…';
+  fetch(API + '/auth/register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body:   JSON.stringify({ businessId: bid, nombre: nombre, password: pass })
+  }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.data.error || 'Error al registrarse'; return; }
+      onAuthSuccess(res.data.token, res.data.businessId);
+    })
+    .catch(function () { errEl.textContent = 'Error de conexión'; })
+    .finally(function () { btn.disabled = false; btn.textContent = 'Crear cuenta'; });
+};
 
 // ── Navigation ──────────────────────────────────────────────────────────────
 
@@ -1181,6 +1385,35 @@ window.showSection = function (name) {
 
 // Bootstrap sidebar labels
 document.getElementById('sidebar-bid').textContent = BID;
+
+// Pre-fill login form with BID from URL
+(function () {
+  var bidInput = document.getElementById('auth-bid-login');
+  if (bidInput && BID && BID !== 'default') bidInput.value = BID;
+})();
+
+// Check auth on load
+(function checkAuth() {
+  var token = getToken();
+  if (!token) { showAuthOverlay(); return; }
+  fetch(API + '/auth/verify', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function (r) {
+      if (!r.ok) { showAuthOverlay(); return; }
+      r.json().then(function (d) {
+        if (!d.valid || (d.role === 'business' && d.businessId !== BID)) {
+          showAuthOverlay();
+        } else {
+          document.getElementById('auth-overlay').classList.add('hidden');
+          window._startDashboard && window._startDashboard();
+        }
+      });
+    })
+    .catch(function () {
+      // Red caída: dejar pasar con el token existente
+      document.getElementById('auth-overlay').classList.add('hidden');
+      window._startDashboard && window._startDashboard();
+    });
+})();
 
 // Activate section from URL hash  (#pedidos or #config)
 (function () {
@@ -1724,9 +1957,11 @@ document.getElementById('sidebar-bid').textContent = BID;
   // ── Bootstrap ──────────────────────────────────────────────────────────────
 
   updateMuteBtn();
-  poll();
-  setInterval(poll,      POLL_MS);
-  setInterval(tickTimes, 15000);
+  window._startDashboard = function () {
+    poll();
+    setInterval(poll,      POLL_MS);
+    setInterval(tickTimes, 15000);
+  };
 
 })();
 </script>
@@ -1780,8 +2015,7 @@ document.getElementById('sidebar-bid').textContent = BID;
   // ── Load / Save ────────────────────────────────────────────────────────────
 
   window.loadConfig = function () {
-    fetch(API + '/config?businessId=' + encodeURIComponent(BID))
-      .then(function (r) { return r.json(); })
+    apiFetch('/config')
       .then(function (cfg) {
         document.getElementById('f-nombre').value      = cfg.nombre          || '';
         document.getElementById('f-descripcion').value = cfg.descripcion     || '';
@@ -1826,12 +2060,11 @@ document.getElementById('sidebar-bid').textContent = BID;
       color_widget:   color,
       menu:           CS.menu
     };
-    fetch(API + '/config?businessId=' + encodeURIComponent(BID), {
+    apiFetch('/config', {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body)
     })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function () {
         CS.dirty = false;
         var st = document.getElementById('save-status');
