@@ -1426,10 +1426,15 @@ document.getElementById('sidebar-bid').textContent = BID;
       }
     });
 
-    visible.forEach(function (p) {
-      var card = document.getElementById('order-' + p.id);
-      if (card) list.appendChild(card);
-    });
+    var currentOrder = Array.from(list.querySelectorAll('.order-card')).map(function(c){ return parseInt(c.id.replace('order-',''),10); });
+    var newOrder = visible.map(function(p){ return p.id; });
+    var needsReorder = currentOrder.join(',') !== newOrder.join(',');
+    if (needsReorder) {
+      visible.forEach(function (p) {
+        var card = document.getElementById('order-' + p.id);
+        if (card) list.appendChild(card);
+      });
+    }
 
     if (hadNewOrders) playOrderAlert();
   }
