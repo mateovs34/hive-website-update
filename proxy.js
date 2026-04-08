@@ -906,46 +906,158 @@ async function handleWhatsAppWebhook(req, res) {
   var ownerPhone = (negocio.whatsapp || '').replace(/^whatsapp:/i, '').trim();
   var isOwner    = ownerPhone && ownerPhone === senderPhone;
 
-  // ── Flujo dueño: métricas + GPT ────────────────────────────────────────────
+  // ── Flujo dueño: contexto completo + GPT ──────────────────────────────────
   if (isOwner) {
     try {
-      var metricsResult = await pool.query(`
-        SELECT
-          COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE) AS pedidos_hoy,
-          COUNT(*) FILTER (WHERE estado = 'pendiente')           AS pedidos_pendientes,
-          COUNT(*)                                               AS total_pedidos,
-          (SELECT json_agg(sub) FROM (
-            SELECT detalles, estado, creado_en FROM pedidos
-            WHERE business_id = $1
-            ORDER BY creado_en DESC LIMIT 5
-          ) sub) AS ultimos_pedidos
-        FROM pedidos
-        WHERE business_id = $1
-      `, [businessId]);
+      // Consultas en paralelo para minimizar latencia
+      var results = await Promise.all([
+        // Métricas de conteo
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE)        AS pedidos_hoy,
+            COUNT(*) FILTER (WHERE estado = 'pendiente')                  AS pendientes,
+            COUNT(*) FILTER (WHERE estado = 'confirmado')                 AS confirmados,
+            COUNT(*) FILTER (WHERE estado = 'cancelado')                  AS cancelados,
+            COUNT(*) FILTER (WHERE creado_en >= NOW() - INTERVAL '1 hour') AS ultima_hora,
+            COUNT(*)                                                       AS total_historico
+          FROM pedidos WHERE business_id = $1
+        `, [businessId]),
 
-      var m       = metricsResult.rows[0];
-      var ultimos = m.ultimos_pedidos || [];
+        // Últimos 10 pedidos con detalle completo
+        pool.query(`
+          SELECT detalles, estado, creado_en
+          FROM pedidos
+          WHERE business_id = $1
+          ORDER BY creado_en DESC LIMIT 10
+        `, [businessId])
+      ]);
 
+      var counts  = results[0].rows[0];
+      var ultRows = results[1].rows;
+
+      // Parsear detalles de cada pedido
+      var ultimos = ultRows.map(function (r) {
+        var d; try { d = JSON.parse(r.detalles); } catch (_) { d = {}; }
+        return { detalles: d, estado: r.estado, creado_en: r.creado_en };
+      });
+
+      // Calcular facturación desde los campos "total" del JSON de detalles
+      function parseMonto(str) {
+        if (!str) return 0;
+        var n = parseFloat(String(str).replace(/[^0-9.,]/g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+      }
+
+      var ahora        = new Date();
+      var inicioHoy    = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+      var hace1hora    = new Date(ahora.getTime() - 60 * 60 * 1000);
+
+      // Facturación solo de pedidos confirmados
+      var facturadoHoy = 0;
+      var facturadoTotal = 0;
+      var facturadoUltimaHora = 0;
+      var pedidosHoyArr = [];
+
+      // Para poder responder "qué se vendió más", contar items
+      var itemConteo = {};
+
+      ultimos.forEach(function (p) {
+        var monto = parseMonto(p.detalles.total);
+        var fecha = new Date(p.creado_en);
+        if (p.estado === 'confirmado') {
+          facturadoTotal += monto;
+          if (fecha >= inicioHoy) {
+            facturadoHoy += monto;
+            pedidosHoyArr.push(p);
+          }
+          if (fecha >= hace1hora) facturadoUltimaHora += monto;
+        }
+        // Conteo de items (todos los estados para responder "qué se pidió más")
+        if (Array.isArray(p.detalles.items)) {
+          p.detalles.items.forEach(function (it) {
+            var nombre = it.nombre || it.name || '?';
+            itemConteo[nombre] = (itemConteo[nombre] || 0) + (parseInt(it.cantidad) || 1);
+          });
+        }
+      });
+
+      var ticketPromedio = (parseInt(counts.confirmados) > 0)
+        ? (facturadoTotal / parseInt(counts.confirmados)).toFixed(2)
+        : 0;
+
+      // Top 5 productos más pedidos
+      var topItems = Object.entries(itemConteo)
+        .sort(function (a, b) { return b[1] - a[1]; })
+        .slice(0, 5)
+        .map(function (e) { return '  • ' + e[0] + ': ' + e[1] + ' unid.'; })
+        .join('\n') || '  (sin datos)';
+
+      // Detalle de los últimos 10 pedidos
       var ultimosText = ultimos.length
         ? ultimos.map(function (p) {
-            var d; try { d = JSON.parse(p.detalles); } catch (_) { d = {}; }
-            var items = Array.isArray(d.items)
-              ? d.items.map(function (i) { return i.nombre; }).join(', ')
+            var items = Array.isArray(p.detalles.items)
+              ? p.detalles.items.map(function (i) {
+                  return (i.cantidad ? 'x' + i.cantidad + ' ' : '') + (i.nombre || i.name || '?');
+                }).join(', ')
               : '?';
-            var hora = new Date(p.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-            return '  • [' + p.estado + '] ' + items + ' (' + hora + ')';
+            var total = p.detalles.total || '—';
+            var hora  = new Date(p.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+            var fecha = new Date(p.creado_en).toLocaleDateString('es-AR');
+            return '  • [' + p.estado + '] ' + items + ' | Total: ' + total + ' | ' + fecha + ' ' + hora;
           }).join('\n')
         : '  (sin pedidos aún)';
 
+      // Menú completo
+      var menu = [];
+      try { menu = JSON.parse(negocio.menu || '[]'); } catch (_) {}
+      var menuText = menu.length
+        ? menu.map(function (it) {
+            var line = '  • ' + it.nombre;
+            if (it.precio)      line += ' (' + it.precio + ')';
+            if (it.descripcion) line += ' — ' + it.descripcion;
+            if (it.categoria)   line += ' [' + it.categoria + ']';
+            return line;
+          }).join('\n')
+        : '  (sin menú configurado)';
+
       var systemPrompt =
-        'Eres el asistente del propietario de ' + negocio.nombre + '. ' +
-        'El dueño te consulta por WhatsApp sobre su negocio. ' +
-        'Respondé en texto plano (sin markdown), máximo 3 oraciones, directo y claro.\n\n' +
-        'DATOS ACTUALES:\n' +
-        'Pedidos hoy: ' + (m.pedidos_hoy || 0) + '\n' +
-        'Pendientes: ' + (m.pedidos_pendientes || 0) + '\n' +
-        'Total histórico: ' + (m.total_pedidos || 0) + '\n' +
-        'Últimos 5 pedidos:\n' + ultimosText;
+        'Eres el asistente de negocio de ' + negocio.nombre + '. ' +
+        'El dueño te consulta por WhatsApp. ' +
+        'Respondé en texto plano (sin markdown, sin asteriscos), de forma directa y concisa. ' +
+        'Usá los datos reales provistos para responder cualquier consulta de ventas, productos o configuración.\n\n' +
+
+        '══ CONFIGURACIÓN DEL NEGOCIO ══\n' +
+        'Nombre: ' + negocio.nombre + '\n' +
+        (negocio.descripcion ? 'Descripción: ' + negocio.descripcion + '\n' : '') +
+        (negocio.horarios    ? 'Horarios: '    + negocio.horarios    + '\n' : '') +
+        (negocio.direccion   ? 'Dirección: '   + negocio.direccion   + '\n' : '') +
+        (negocio.telefono    ? 'Teléfono: '    + negocio.telefono    + '\n' : '') +
+        '\n' +
+
+        '══ MÉTRICAS DE HOY ══\n' +
+        'Pedidos hoy: '          + counts.pedidos_hoy  + '\n' +
+        'Pendientes: '           + counts.pendientes   + '\n' +
+        'Confirmados: '          + counts.confirmados  + '\n' +
+        'Cancelados: '           + counts.cancelados   + '\n' +
+        'Última hora: '          + counts.ultima_hora  + ' pedidos\n' +
+        'Facturado hoy (conf.): $' + facturadoHoy.toFixed(2) + '\n' +
+        'Facturado última hora: $' + facturadoUltimaHora.toFixed(2) + '\n' +
+        '\n' +
+
+        '══ HISTÓRICO TOTAL ══\n' +
+        'Total pedidos: '        + counts.total_historico + '\n' +
+        'Total facturado (conf.): $' + facturadoTotal.toFixed(2) + '\n' +
+        'Ticket promedio: $'     + ticketPromedio + '\n' +
+        '\n' +
+
+        '══ PRODUCTOS MÁS PEDIDOS (histórico) ══\n' +
+        topItems + '\n\n' +
+
+        '══ MENÚ COMPLETO ══\n' +
+        menuText + '\n\n' +
+
+        '══ ÚLTIMOS 10 PEDIDOS ══\n' +
+        ultimosText;
 
       var ownerMessages = [
         { role: 'system', content: systemPrompt },
