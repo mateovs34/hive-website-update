@@ -56,6 +56,9 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
     console.warn('[Twilio] No se pudo inicializar:', e.message);
   }
 }
+console.log('[Twilio] cliente:', twilioClient ? 'OK' : 'NULL - variables faltantes');
+console.log('[Twilio] ACCOUNT_SID presente:', !!process.env.TWILIO_ACCOUNT_SID);
+console.log('[Twilio] AUTH_TOKEN presente:', !!process.env.TWILIO_AUTH_TOKEN);
 
 // ── Base de datos ─────────────────────────────────────────────────────────────
 
@@ -293,6 +296,7 @@ async function saveMessage(businessId, sessionId, rol, contenido) {
 }
 
 async function sendWhatsAppNotification(negocio, pedido) {
+  console.log('[WhatsApp] intentando enviar a:', negocio.whatsapp);
   if (!twilioClient || !negocio.whatsapp) return;
 
   var items = Array.isArray(pedido.items) ? pedido.items : [];
@@ -337,6 +341,12 @@ async function savePedidoIfDetected(businessId, sessionId, parsed) {
     console.log('[DB] Pedido creado — negocio:', businessId, 'sesión:', sessionId);
 
     // Notificación WhatsApp (fire-and-forget, no interrumpe el flujo)
+    pool.query(`SELECT nombre, whatsapp FROM negocios WHERE business_id = $1`, [businessId])
+      .then(function (r) {
+        var negocio = r.rows[0] || {};
+        console.log('[WhatsApp] twilioClient activo:', !!twilioClient, 'whatsapp negocio:', negocio.whatsapp);
+      })
+      .catch(function () {});
     if (twilioClient) {
       pool.query(`SELECT nombre, whatsapp FROM negocios WHERE business_id = $1`, [businessId])
         .then(function (r) {
