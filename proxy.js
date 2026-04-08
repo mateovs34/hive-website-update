@@ -134,6 +134,39 @@ async function initSchema() {
     CHECK (estado IN ('pendiente','confirmado','en_preparacion','en_camino','entregado','cancelado'))
   `);
 
+  // Tablas de turnos
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS disponibilidad (
+      id               SERIAL PRIMARY KEY,
+      business_id      TEXT NOT NULL REFERENCES negocios(business_id) ON DELETE CASCADE,
+      dia_semana       INTEGER NOT NULL CHECK (dia_semana BETWEEN 0 AND 6),
+      hora_inicio      TEXT NOT NULL DEFAULT '09:00',
+      hora_fin         TEXT NOT NULL DEFAULT '18:00',
+      duracion_minutos INTEGER NOT NULL DEFAULT 30,
+      activo           BOOLEAN NOT NULL DEFAULT true,
+      UNIQUE(business_id, dia_semana)
+    );
+
+    CREATE TABLE IF NOT EXISTS turnos (
+      id               SERIAL PRIMARY KEY,
+      business_id      TEXT NOT NULL REFERENCES negocios(business_id) ON DELETE CASCADE,
+      fecha            DATE NOT NULL,
+      hora             TEXT NOT NULL,
+      duracion_minutos INTEGER NOT NULL DEFAULT 30,
+      nombre_cliente   TEXT NOT NULL DEFAULT '',
+      telefono_cliente TEXT NOT NULL DEFAULT '',
+      servicio         TEXT NOT NULL DEFAULT 'Consulta',
+      estado           TEXT NOT NULL DEFAULT 'reservado'
+                       CHECK (estado IN ('reservado','cancelado','completado')),
+      session_id       TEXT,
+      creado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Columnas de turnos en negocios (migraciones no destructivas)
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turnos_activos INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turno_servicio TEXT NOT NULL DEFAULT 'Consulta'`);
+
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
     INSERT INTO negocios (business_id, nombre)
@@ -368,9 +401,77 @@ async function savePedidoIfDetected(businessId, sessionId, parsed) {
   } catch (e) { console.error('[DB] savePedido:', e.message); }
 }
 
+// ── Helpers de turnos ─────────────────────────────────────────────────────────
+
+function generateSlots(horaInicio, horaFin, duracion) {
+  var parts0 = horaInicio.split(':');
+  var parts1 = horaFin.split(':');
+  var start = parseInt(parts0[0], 10) * 60 + parseInt(parts0[1] || '0', 10);
+  var end   = parseInt(parts1[0], 10) * 60 + parseInt(parts1[1] || '0', 10);
+  var slots = [];
+  for (var t = start; t + duracion <= end; t += duracion) {
+    var hh = String(Math.floor(t / 60)).padStart(2, '0');
+    var mm = String(t % 60).padStart(2, '0');
+    slots.push(hh + ':' + mm);
+  }
+  return slots;
+}
+
+async function getTurnosContextForPrompt(businessId) {
+  var lines = [];
+  var today = new Date();
+  for (var d = 0; d < 4; d++) {
+    var fecha = new Date(today);
+    fecha.setDate(today.getDate() + d);
+    var dia = fecha.getDay();
+    var fechaStr = fecha.toISOString().slice(0, 10);
+    var dispRes = await pool.query(
+      `SELECT * FROM disponibilidad WHERE business_id = $1 AND dia_semana = $2 AND activo = true`,
+      [businessId, dia]
+    );
+    if (dispRes.rows.length === 0) continue;
+    var disp = dispRes.rows[0];
+    var all = generateSlots(disp.hora_inicio, disp.hora_fin, disp.duracion_minutos);
+    var bookedRes = await pool.query(
+      `SELECT hora FROM turnos WHERE business_id = $1 AND fecha = $2 AND estado = 'reservado'`,
+      [businessId, fechaStr]
+    );
+    var bookedSet = new Set(bookedRes.rows.map(function (r) { return r.hora; }));
+    var available = all.filter(function (s) { return !bookedSet.has(s); });
+    if (available.length > 0) {
+      lines.push(fechaStr + ': ' + available.join(', '));
+    }
+  }
+  return lines.length
+    ? 'TURNOS DISPONIBLES (próximos días):\n' + lines.join('\n')
+    : 'TURNOS: No hay disponibilidad en los próximos días.';
+}
+
+async function saveTurnoIfDetected(businessId, sessionId, parsed) {
+  if (!parsed || !parsed.turno) return;
+  var t = parsed.turno;
+  if (!t.fecha || !t.hora) return;
+  try {
+    await pool.query(`
+      INSERT INTO turnos (business_id, fecha, hora, duracion_minutos, nombre_cliente, telefono_cliente, servicio, session_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+      businessId,
+      t.fecha,
+      t.hora,
+      parseInt(t.duracion_minutos, 10) || 30,
+      String(t.nombre_cliente   || '').slice(0, 100),
+      String(t.telefono_cliente || '').slice(0, 50),
+      String(t.servicio         || 'Consulta').slice(0, 100),
+      sessionId || null
+    ]);
+    console.log('[DB] Turno creado — negocio:', businessId, 'fecha:', t.fecha, 'hora:', t.hora);
+  } catch (e) { console.error('[DB] saveTurno:', e.message); }
+}
+
 // ── System prompt desde config ────────────────────────────────────────────────
 
-function buildSystemPromptFromConfig(cfg) {
+function buildSystemPromptFromConfig(cfg, turnoContext) {
   var menu = [];
   try { menu = JSON.parse(cfg.menu || '[]'); } catch (_) {}
 
@@ -383,6 +484,19 @@ function buildSystemPromptFromConfig(cfg) {
       }).join('\n')
     : '';
 
+  var turnoInstructions = '';
+  if (cfg.turnos_activos) {
+    var servicio = cfg.turno_servicio || 'Consulta';
+    turnoInstructions =
+      'RESERVA DE TURNO — si el cliente quiere reservar un turno, seguí estos pasos:\n' +
+      '1. Mostrá los horarios disponibles listados arriba.\n' +
+      '2. Pedí nombre completo y teléfono de contacto.\n' +
+      '3. Confirmá fecha y hora elegida.\n' +
+      '4. Solo cuando el cliente confirme, incluí el campo "turno" en tu respuesta:\n' +
+      '{"text":"¡Turno reservado!","humanContact":false,"turno":{"fecha":"YYYY-MM-DD","hora":"HH:MM","nombre_cliente":"...","telefono_cliente":"...","servicio":"' + servicio + '","duracion_minutos":30}}\n' +
+      'Si no se está reservando un turno, omitir el campo "turno".\n\n';
+  }
+
   return (
     'Eres ' + cfg.bot_nombre + ', el asistente virtual de ' + cfg.nombre + '.\n\n' +
     'DESCRIPCIÓN DEL NEGOCIO:\n' + (cfg.descripcion || 'Negocio local.') + '\n\n' +
@@ -390,6 +504,7 @@ function buildSystemPromptFromConfig(cfg) {
     (cfg.horarios  ? 'HORARIOS: '   + cfg.horarios  + '\n' : '') +
     (cfg.direccion ? 'DIRECCIÓN: '  + cfg.direccion + '\n' : '') +
     (cfg.telefono  ? 'TELÉFONO: '   + cfg.telefono  + '\n\n' : '\n') +
+    (turnoContext  ? turnoContext + '\n\n' : '') +
     'PERSONALIDAD:\n' +
     '- Adaptate al tono del usuario\n' +
     '- Sé empático, servicial y conciso (máximo 3-4 oraciones)\n' +
@@ -401,7 +516,8 @@ function buildSystemPromptFromConfig(cfg) {
     'PROHIBIDO: markdown, texto fuera del JSON, comentarios.\n\n' +
     'DETECCIÓN DE PEDIDOS — cuando el usuario confirme un pedido, agregá el campo "pedido":\n' +
     '{"text":"¡Anotado!","humanContact":false,"pedido":{"items":[{"nombre":"...","cantidad":1,"precio":"$..."}],"total":"$...","notas":""}}\n' +
-    'Si no hay pedido confirmado, omitir el campo "pedido".'
+    'Si no hay pedido confirmado, omitir el campo "pedido".\n\n' +
+    turnoInstructions
   );
 }
 
@@ -456,9 +572,9 @@ function buildWhatsAppCustomerPrompt(cfg) {
   );
 }
 
-function injectSystemPrompt(messages, cfg) {
+function injectSystemPrompt(messages, cfg, turnoContext) {
   var result = messages.slice();
-  var prompt = buildSystemPromptFromConfig(cfg);
+  var prompt = buildSystemPromptFromConfig(cfg, turnoContext);
   var idx    = result.findIndex(function (m) { return m.role === 'system'; });
   if (idx !== -1) {
     result[idx] = { role: 'system', content: prompt };
@@ -507,6 +623,7 @@ function forwardToOpenAI(messages, businessId, sessionId, res) {
           var parsed  = JSON.parse(content);
           saveMessage(businessId, sessionId, 'assistant', content).catch(function () {});
           savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
+          saveTurnoIfDetected(businessId, sessionId, parsed).catch(function () {});
         } catch (_) {}
       }
     });
@@ -657,9 +774,9 @@ async function handlePutConfig(businessId, res, raw) {
       INSERT INTO negocios
         (business_id, nombre, descripcion, menu, horarios, direccion, telefono,
          email_contacto, whatsapp, welcome_msg, bot_nombre, bot_avatar,
-         color_widget, actualizado_en)
+         color_widget, turnos_activos, turno_servicio, actualizado_en)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
       ON CONFLICT (business_id) DO UPDATE SET
         nombre         = EXCLUDED.nombre,
         descripcion    = EXCLUDED.descripcion,
@@ -673,6 +790,8 @@ async function handlePutConfig(businessId, res, raw) {
         bot_nombre     = EXCLUDED.bot_nombre,
         bot_avatar     = EXCLUDED.bot_avatar,
         color_widget   = EXCLUDED.color_widget,
+        turnos_activos = EXCLUDED.turnos_activos,
+        turno_servicio = EXCLUDED.turno_servicio,
         actualizado_en = NOW()
     `, [
       businessId,
@@ -687,7 +806,9 @@ async function handlePutConfig(businessId, res, raw) {
       String(body.welcome_msg    || '¡Hola! ¿En qué puedo ayudarte?').slice(0, 300),
       String(body.bot_nombre     || 'Asistente').slice(0, 50),
       String(body.bot_avatar     || '🤖').slice(0, 10),
-      /^#[0-9a-fA-F]{6}$/.test(body.color_widget) ? body.color_widget : '#6366f1'
+      /^#[0-9a-fA-F]{6}$/.test(body.color_widget) ? body.color_widget : '#6366f1',
+      body.turnos_activos ? 1 : 0,
+      String(body.turno_servicio || 'Consulta').slice(0, 100)
     ]);
     sendJSON(res, 200, { ok: true });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
@@ -754,6 +875,146 @@ async function handlePatchPedido(id, businessId, res, raw) {
       });
     }
 
+    sendJSON(res, 200, { ok: true, id: id, estado: body.estado });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// ── Handlers de disponibilidad y turnos ──────────────────────────────────────
+
+// GET /disponibilidad?businessId=xxx
+async function handleGetDisponibilidad(businessId, res) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var result = await pool.query(
+      `SELECT id, dia_semana, hora_inicio, hora_fin, duracion_minutos, activo
+       FROM disponibilidad WHERE business_id = $1 ORDER BY dia_semana`,
+      [businessId]
+    );
+    sendJSON(res, 200, result.rows);
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// PUT /disponibilidad?businessId=xxx  — body: array de {dia_semana, hora_inicio, hora_fin, duracion_minutos, activo}
+async function handlePutDisponibilidad(businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  if (!Array.isArray(body)) return sendJSON(res, 400, { error: 'se esperaba un array' });
+  try {
+    for (var i = 0; i < body.length; i++) {
+      var d = body[i];
+      if (d.dia_semana == null) continue;
+      await pool.query(`
+        INSERT INTO disponibilidad (business_id, dia_semana, hora_inicio, hora_fin, duracion_minutos, activo)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (business_id, dia_semana) DO UPDATE SET
+          hora_inicio      = EXCLUDED.hora_inicio,
+          hora_fin         = EXCLUDED.hora_fin,
+          duracion_minutos = EXCLUDED.duracion_minutos,
+          activo           = EXCLUDED.activo
+      `, [
+        businessId,
+        parseInt(d.dia_semana, 10),
+        String(d.hora_inicio      || '09:00').slice(0, 5),
+        String(d.hora_fin         || '18:00').slice(0, 5),
+        parseInt(d.duracion_minutos, 10) || 30,
+        d.activo ? true : false
+      ]);
+    }
+    sendJSON(res, 200, { ok: true });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// GET /turnos?businessId=xxx&fecha=YYYY-MM-DD
+async function handleGetTurnos(businessId, res, query) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var where = `WHERE business_id = $1`;
+    var params = [businessId];
+    if (query.fecha) {
+      params.push(query.fecha);
+      where += ` AND fecha = $` + params.length;
+    }
+    var result = await pool.query(
+      `SELECT id, fecha, hora, duracion_minutos, nombre_cliente, telefono_cliente, servicio, estado, session_id, creado_en
+       FROM turnos ${where} ORDER BY fecha, hora`,
+      params
+    );
+    sendJSON(res, 200, result.rows);
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// GET /turnos/disponibles?businessId=xxx&fecha=YYYY-MM-DD  (público)
+async function handleGetTurnosDisponibles(businessId, res, query) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var fecha = query.fecha || new Date().toISOString().slice(0, 10);
+  try {
+    var fechaObj = new Date(fecha + 'T00:00:00Z');
+    var dia = fechaObj.getUTCDay();
+    var dispRes = await pool.query(
+      `SELECT * FROM disponibilidad WHERE business_id = $1 AND dia_semana = $2 AND activo = true`,
+      [businessId, dia]
+    );
+    if (dispRes.rows.length === 0) return sendJSON(res, 200, []);
+    var disp = dispRes.rows[0];
+    var all = generateSlots(disp.hora_inicio, disp.hora_fin, disp.duracion_minutos);
+    var bookedRes = await pool.query(
+      `SELECT hora FROM turnos WHERE business_id = $1 AND fecha = $2 AND estado = 'reservado'`,
+      [businessId, fecha]
+    );
+    var bookedSet = new Set(bookedRes.rows.map(function (r) { return r.hora; }));
+    var available = all.filter(function (s) { return !bookedSet.has(s); });
+    sendJSON(res, 200, available);
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// POST /turnos?businessId=xxx  (público — puede venir del widget/bot)
+async function handlePostTurno(businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  if (!body.fecha || !body.hora) return sendJSON(res, 400, { error: 'fecha y hora requeridos' });
+  try {
+    // Verificar que el slot esté disponible
+    var existing = await pool.query(
+      `SELECT id FROM turnos WHERE business_id = $1 AND fecha = $2 AND hora = $3 AND estado = 'reservado'`,
+      [businessId, body.fecha, body.hora]
+    );
+    if (existing.rows.length > 0) return sendJSON(res, 409, { error: 'horario_ocupado' });
+
+    var result = await pool.query(`
+      INSERT INTO turnos (business_id, fecha, hora, duracion_minutos, nombre_cliente, telefono_cliente, servicio, session_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+    `, [
+      businessId,
+      body.fecha,
+      body.hora,
+      parseInt(body.duracion_minutos, 10) || 30,
+      String(body.nombre_cliente   || '').slice(0, 100),
+      String(body.telefono_cliente || '').slice(0, 50),
+      String(body.servicio         || 'Consulta').slice(0, 100),
+      body.session_id || null
+    ]);
+    sendJSON(res, 201, { ok: true, id: result.rows[0].id });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// PATCH /turnos/:id?businessId=xxx
+async function handlePatchTurno(id, businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var estadosValidos = ['reservado', 'cancelado', 'completado'];
+  if (!estadosValidos.includes(body.estado)) return sendJSON(res, 400, { error: 'estado_invalido' });
+  try {
+    var result = await pool.query(
+      `UPDATE turnos SET estado = $1 WHERE id = $2 AND business_id = $3 RETURNING id`,
+      [body.estado, id, businessId]
+    );
+    if (result.rowCount === 0) return sendJSON(res, 404, { error: 'not_found' });
     sendJSON(res, 200, { ok: true, id: id, estado: body.estado });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
@@ -1265,7 +1526,11 @@ var server = http.createServer(function (req, res) {
 
       var cfgResult = await pool.query(`SELECT * FROM negocios WHERE business_id = $1`, [businessId]);
       var cfg       = cfgResult.rows[0] || null;
-      var messages  = cfg ? injectSystemPrompt(body.messages, cfg) : body.messages;
+      var turnoCtx  = null;
+      if (cfg && cfg.turnos_activos) {
+        try { turnoCtx = await getTurnosContextForPrompt(businessId); } catch (_) {}
+      }
+      var messages  = cfg ? injectSystemPrompt(body.messages, cfg, turnoCtx) : body.messages;
 
       if (sessionId) {
         await ensureSession(businessId, sessionId);
@@ -1323,6 +1588,47 @@ var server = http.createServer(function (req, res) {
     if (!verifyToken(req)) return sendUnauthorized(res);
     return handleGetMensajes(decodeURIComponent(convMatch[1]), res)
       .catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // ── Endpoints de turnos ───────────────────────────────────────────────────
+
+  // GET /disponibilidad?businessId=xxx
+  if (req.method === 'GET' && u.path === '/disponibilidad') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleGetDisponibilidad(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // PUT /disponibilidad?businessId=xxx
+  if (req.method === 'PUT' && u.path === '/disponibilidad') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handlePutDisponibilidad(bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // GET /turnos/disponibles?businessId=xxx&fecha=YYYY-MM-DD  (público)
+  if (req.method === 'GET' && u.path === '/turnos/disponibles') {
+    return handleGetTurnosDisponibles(bid, res, u.query).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // GET /turnos?businessId=xxx
+  if (req.method === 'GET' && u.path === '/turnos') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleGetTurnos(bid, res, u.query).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // POST /turnos?businessId=xxx  (público — widget/bot)
+  if (req.method === 'POST' && u.path === '/turnos') {
+    return readBody(req).then(function (r) { return handlePostTurno(bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // PATCH /turnos/:id?businessId=xxx
+  var turnoMatch = u.path.match(/^\/turnos\/(\d+)$/);
+  if (req.method === 'PATCH' && turnoMatch) {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    var turnoId = parseInt(turnoMatch[1], 10);
+    return readBody(req).then(function (r) { return handlePatchTurno(turnoId, bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
   }
 
   // ── Twilio webhook (público — validado por Twilio) ────────────────────────

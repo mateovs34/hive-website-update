@@ -948,6 +948,69 @@
       .stats-bar   { grid-template-columns: 1fr 1fr; }
     }
 
+    /* ── Turnos ─────────────────────────────────────────────────────────────── */
+    #section-turnos { flex-direction: column; overflow: hidden; }
+    .tr-layout { display: flex; flex: 1; gap: 16px; padding: 16px; overflow: hidden; }
+    .tr-day-view { flex: 1; display: flex; flex-direction: column; background: var(--surface); border-radius: 10px; overflow: hidden; }
+    .tr-day-header { padding: 12px 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); }
+    .tr-slot-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .tr-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 14px; }
+    .tr-slot-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+    .tr-slot-item:hover { background: var(--surface2); }
+    .tr-slot-time { font-size: 13px; font-weight: 700; color: var(--accent); min-width: 52px; }
+    .tr-slot-info { flex: 1; }
+    .tr-slot-name { font-size: 13px; font-weight: 600; }
+    .tr-slot-sub { font-size: 12px; color: var(--muted); }
+    .tr-slot-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+    .tr-slot-badge.reservado  { background: rgba(99,102,241,.15); color: #818cf8; }
+    .tr-slot-badge.completado { background: rgba(34,197,94,.15);  color: #4ade80; }
+    .tr-slot-badge.cancelado  { background: rgba(239,68,68,.15);  color: #f87171; }
+    .tr-slot-free  { background: rgba(99,102,241,.06); }
+    .tr-slot-free .tr-slot-time { color: var(--muted); }
+    /* Mini calendar */
+    .tr-mini-cal { width: 220px; background: var(--surface); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+    .tr-cal-header { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 14px; }
+    .tr-cal-grid { display: grid; grid-template-columns: repeat(7,1fr); }
+    .tr-cal-dow { text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; }
+    .tr-cal-days { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .tr-cal-day { text-align: center; font-size: 12px; padding: 5px 2px; border-radius: 6px; cursor: pointer; transition: background .15s; }
+    .tr-cal-day:hover { background: var(--surface2); }
+    .tr-cal-day.selected { background: var(--accent); color: #fff; }
+    .tr-cal-day.today { font-weight: 700; box-shadow: inset 0 0 0 1px var(--accent); }
+    .tr-cal-day.has-turnos { position: relative; }
+    .tr-cal-day.has-turnos::after { content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background: var(--accent); }
+    .tr-cal-day.empty { cursor: default; }
+    /* Date nav */
+    .tr-date-label { font-size: 15px; font-weight: 700; min-width: 140px; text-align: center; }
+    .btn-icon { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 16px; color: var(--text); }
+    .btn-icon:hover { background: var(--surface2); }
+    /* Turno modal */
+    .tr-modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .tr-modal.hidden { display: none; }
+    .tr-modal-box { background: var(--surface); border-radius: 12px; padding: 24px; max-width: 380px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+    .tr-modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+    .tr-modal-body { font-size: 14px; line-height: 1.7; color: var(--muted); margin-bottom: 20px; }
+    .tr-modal-body strong { color: var(--text); }
+    .tr-modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-danger { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-ok { background: rgba(34,197,94,.15); color: #4ade80; border: 1px solid rgba(34,197,94,.3); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    /* Toggle switch for config */
+    .toggle-switch { display: flex; align-items: center; gap: 0; cursor: pointer; }
+    .toggle-switch input { display: none; }
+    .toggle-slider { width: 42px; height: 24px; background: var(--border); border-radius: 12px; position: relative; transition: background .2s; }
+    .toggle-slider::before { content:''; position:absolute; left:3px; top:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition: transform .2s; }
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+    /* Disponibilidad grid */
+    .disp-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .disp-day-label { min-width: 90px; font-size: 13px; font-weight: 600; }
+    .disp-time-input { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 13px; width: 90px; }
+    @media (max-width: 768px) {
+      .tr-layout { flex-direction: column; padding: 10px; overflow-y: auto; }
+      .tr-mini-cal { width: 100%; }
+      .tr-day-view { min-height: 300px; }
+    }
+
     /* ── Analytics ──────────────────────────────────────────────────────────── */
     /* No redefinir display aquí — .app-section ya lo setea y .hidden lo overridea */
     #section-analytics { flex-direction: column; overflow: hidden; }
@@ -1054,6 +1117,10 @@
         <span class="nav-icon">📊</span>
         <span>Pedidos</span>
         <span class="nav-badge" id="nav-pending-badge"></span>
+      </button>
+      <button class="nav-item" id="nav-turnos" onclick="showSection('turnos')">
+        <span class="nav-icon">📅</span>
+        <span>Turnos</span>
       </button>
       <button class="nav-item" id="nav-analytics" onclick="showSection('analytics')">
         <span class="nav-icon">📈</span>
@@ -1201,6 +1268,7 @@
           <button class="tab-btn"        onclick="setTab('menu')">🍽️ Menú</button>
           <button class="tab-btn"        onclick="setTab('bot')">🤖 Bot & Widget</button>
           <button class="tab-btn"        onclick="setTab('install')">🔌 Instalación</button>
+          <button class="tab-btn"        onclick="setTab('cfg-turnos')">📅 Turnos</button>
         </div>
         <div class="config-topbar-actions">
           <span class="save-status" id="save-status"></span>
@@ -1402,9 +1470,101 @@ docker compose up --build -d</div>
             </div>
           </div><!-- /tab-install -->
 
+          <!-- ── TAB TURNOS (config) ── -->
+          <div class="tab-panel" id="tab-cfg-turnos">
+            <div class="form-section">
+              <div class="form-section-title">Sistema de turnos</div>
+              <div class="form-row">
+                <label>Activar sistema de turnos</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="f-turnos-activos" onchange="markDirty()">
+                  <span class="toggle-slider"></span>
+                </label>
+                <div class="field-hint">Permite que el bot tome turnos automáticamente por el chat.</div>
+              </div>
+              <div class="form-row">
+                <label>Nombre del servicio</label>
+                <input class="field" id="f-turno-servicio" type="text" maxlength="100"
+                  placeholder="Ej: Consulta, Cita médica, Corte de pelo…" oninput="markDirty()">
+                <div class="field-hint">Se muestra en el turno reservado.</div>
+              </div>
+              <div class="form-row">
+                <label>Duración por defecto</label>
+                <select class="field" id="f-turno-duracion" onchange="onTurnoDuracionChange()">
+                  <option value="15">15 min</option>
+                  <option value="20">20 min</option>
+                  <option value="30" selected>30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="60">60 min</option>
+                  <option value="90">90 min</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-section">
+              <div class="form-section-title">Disponibilidad semanal</div>
+              <div class="field-hint" style="margin-bottom:12px">Configurá los días y horarios en que aceptás turnos.</div>
+              <div id="disp-grid"></div>
+              <button class="btn btn-secondary" style="margin-top:12px" onclick="saveDisponibilidad()">Guardar disponibilidad</button>
+              <span id="disp-save-status" style="margin-left:10px;font-size:13px;color:var(--green)"></span>
+            </div>
+          </div><!-- /tab-cfg-turnos -->
+
         </div><!-- /config-inner -->
       </div><!-- /config-content -->
     </div><!-- /section-config -->
+
+    <!-- ─── SECCIÓN TURNOS ─────────────────────────────────────────────── -->
+    <div class="app-section hidden" id="section-turnos">
+
+      <div class="section-topbar">
+        <span class="section-topbar-title">📅 Turnos</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-icon" id="tr-prev" onclick="TR_prevDay()">‹</button>
+          <span class="tr-date-label" id="tr-date-label">—</span>
+          <button class="btn btn-icon" id="tr-next" onclick="TR_nextDay()">›</button>
+          <button class="btn btn-secondary" onclick="TR_goToday()">Hoy</button>
+        </div>
+      </div>
+
+      <div class="tr-layout">
+        <!-- Day view -->
+        <div class="tr-day-view" id="tr-day-view">
+          <div class="tr-day-header" id="tr-day-header"></div>
+          <div class="tr-slot-list" id="tr-slot-list">
+            <div class="tr-empty" id="tr-empty">Sin turnos para este día</div>
+          </div>
+        </div>
+        <!-- Mini calendar -->
+        <div class="tr-mini-cal" id="tr-mini-cal">
+          <div class="tr-cal-header">
+            <button class="btn btn-icon" onclick="TR_calPrevMonth()">‹</button>
+            <span id="tr-cal-month-label"></span>
+            <button class="btn btn-icon" onclick="TR_calNextMonth()">›</button>
+          </div>
+          <div class="tr-cal-grid">
+            <div class="tr-cal-dow">D</div><div class="tr-cal-dow">L</div>
+            <div class="tr-cal-dow">M</div><div class="tr-cal-dow">X</div>
+            <div class="tr-cal-dow">J</div><div class="tr-cal-dow">V</div>
+            <div class="tr-cal-dow">S</div>
+          </div>
+          <div class="tr-cal-days" id="tr-cal-days"></div>
+        </div>
+      </div>
+
+      <!-- Turno detail modal -->
+      <div class="tr-modal hidden" id="tr-modal">
+        <div class="tr-modal-box">
+          <div class="tr-modal-title" id="tr-modal-title">Turno</div>
+          <div class="tr-modal-body" id="tr-modal-body"></div>
+          <div class="tr-modal-actions">
+            <button class="btn btn-danger" id="tr-modal-cancel-btn" onclick="TR_cancelTurno()">Cancelar turno</button>
+            <button class="btn btn-ok" id="tr-modal-done-btn" onclick="TR_completeTurno()">Marcar completado</button>
+            <button class="btn btn-secondary" onclick="TR_closeModal()">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /section-turnos -->
 
     <!-- ─── SECCIÓN ANALYTICS ───────────────────────────────────────────── -->
     <div class="app-section hidden" id="section-analytics">
@@ -1668,6 +1828,7 @@ window.logout = function () {
   window._resetDashboard  && window._resetDashboard();
   window._resetConfig     && window._resetConfig();
   window._resetAnalytics  && window._resetAnalytics();
+  window._resetTurnos     && window._resetTurnos();
   showAuthOverlay();
 };
 
@@ -1792,9 +1953,11 @@ var _configLoaded = false;
 
 window.showSection = function (name) {
   document.getElementById('section-pedidos').classList.toggle('hidden',    name !== 'pedidos');
+  document.getElementById('section-turnos').classList.toggle('hidden',     name !== 'turnos');
   document.getElementById('section-analytics').classList.toggle('hidden',  name !== 'analytics');
   document.getElementById('section-config').classList.toggle('hidden',     name !== 'config');
   document.getElementById('nav-pedidos').classList.toggle('active',    name === 'pedidos');
+  document.getElementById('nav-turnos').classList.toggle('active',     name === 'turnos');
   document.getElementById('nav-analytics').classList.toggle('active',  name === 'analytics');
   document.getElementById('nav-config').classList.toggle('active',     name === 'config');
 
@@ -1806,6 +1969,9 @@ window.showSection = function (name) {
   }
   if (name === 'analytics') {
     window._analyticsLoad && window._analyticsLoad();
+  }
+  if (name === 'turnos') {
+    window._turnosLoad && window._turnosLoad();
   }
 };
 
@@ -2471,7 +2637,7 @@ document.getElementById('sidebar-bid').textContent = BID;
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
     document.querySelectorAll('.tab-btn').forEach(function (b, i) {
-      b.classList.toggle('active', ['general','menu','bot','install'][i] === tab);
+      b.classList.toggle('active', ['general','menu','bot','install','cfg-turnos'][i] === tab);
     });
     if (tab === 'install') renderInstallSnippet();
   };
@@ -2508,6 +2674,11 @@ document.getElementById('sidebar-bid').textContent = BID;
         document.getElementById('f-color-picker').value = color;
         document.getElementById('f-color-hex').value    = color;
         CS.menu = Array.isArray(cfg.menu) ? cfg.menu : [];
+        // Turnos config
+        var taEl = document.getElementById('f-turnos-activos');
+        if (taEl) taEl.checked = !!cfg.turnos_activos;
+        var tsEl = document.getElementById('f-turno-servicio');
+        if (tsEl) tsEl.value = cfg.turno_servicio || 'Consulta';
         // Update sidebar title + mobile header with business name
         if (cfg.nombre) {
           document.getElementById('sidebar-title').textContent = cfg.nombre;
@@ -2539,7 +2710,9 @@ document.getElementById('sidebar-bid').textContent = BID;
       bot_avatar:     document.getElementById('f-bot-avatar').value.trim(),
       welcome_msg:    document.getElementById('f-welcome').value.trim(),
       color_widget:   color,
-      menu:           CS.menu
+      menu:           CS.menu,
+      turnos_activos: document.getElementById('f-turnos-activos') && document.getElementById('f-turnos-activos').checked ? 1 : 0,
+      turno_servicio: (document.getElementById('f-turno-servicio') && document.getElementById('f-turno-servicio').value.trim()) || 'Consulta'
     };
     apiFetch('/config', {
       method:  'PUT',
@@ -3444,6 +3617,303 @@ document.getElementById('sidebar-bid').textContent = BID;
 
   // Apply dark theme defaults when Chart.js is ready
   if (typeof Chart !== 'undefined') applyChartDefaults();
+
+})();
+
+// ── Turnos IIFE ──────────────────────────────────────────────────────────────
+(function () {
+  'use strict';
+
+  var TR = {
+    selectedDate: new Date(),
+    calMonth:     new Date(),
+    turnos:       [],
+    allTurnos:    {},  // fecha -> [turno]
+    disponibles:  [],
+    activeTurno:  null,
+    duracion:     30
+  };
+
+  var DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  function pad(n) { return String(n).padStart(2,'0'); }
+
+  function toDateStr(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  }
+
+  function sameDay(a, b) {
+    return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  }
+
+  function renderDateLabel() {
+    var d = TR.selectedDate;
+    var el = document.getElementById('tr-date-label');
+    if (el) el.textContent = DIAS[d.getDay()] + ', ' + d.getDate() + ' de ' + MESES[d.getMonth()];
+  }
+
+  function renderDayView() {
+    var dateStr = toDateStr(TR.selectedDate);
+    var header  = document.getElementById('tr-day-header');
+    var list    = document.getElementById('tr-slot-list');
+    if (!list) return;
+
+    var dayTurnos = (TR.allTurnos[dateStr] || []).slice().sort(function(a,b){ return a.hora < b.hora ? -1 : 1; });
+    var disps     = TR.disponibles;
+
+    if (header) {
+      header.textContent = dayTurnos.length
+        ? dayTurnos.length + ' turno' + (dayTurnos.length > 1 ? 's' : '') + ' este día'
+        : 'Sin turnos agendados';
+    }
+
+    // Merge booked + available free slots
+    var items = [];
+    var bookedHoras = new Set(dayTurnos.map(function(t){ return t.hora; }));
+    disps.forEach(function(h) {
+      if (!bookedHoras.has(h)) items.push({ tipo: 'libre', hora: h });
+    });
+    dayTurnos.forEach(function(t) { items.push({ tipo: 'turno', turno: t, hora: t.hora }); });
+    items.sort(function(a,b){ return a.hora < b.hora ? -1 : 1; });
+
+    if (items.length === 0) {
+      list.innerHTML = '<div class="tr-empty">Sin turnos ni disponibilidad configurada para este día</div>';
+      return;
+    }
+
+    list.innerHTML = items.map(function(it) {
+      if (it.tipo === 'libre') {
+        return '<div class="tr-slot-item tr-slot-free"><span class="tr-slot-time">' + it.hora + '</span>' +
+               '<span class="tr-slot-info"><span class="tr-slot-sub">Disponible</span></span></div>';
+      }
+      var t = it.turno;
+      var badge = '<span class="tr-slot-badge ' + t.estado + '">' + t.estado + '</span>';
+      return '<div class="tr-slot-item" onclick="TR_openModal(' + t.id + ')">' +
+             '<span class="tr-slot-time">' + t.hora + '</span>' +
+             '<span class="tr-slot-info">' +
+               '<div class="tr-slot-name">' + (t.nombre_cliente || 'Sin nombre') + '</div>' +
+               '<div class="tr-slot-sub">' + (t.servicio || '') + (t.telefono_cliente ? ' · ' + t.telefono_cliente : '') + '</div>' +
+             '</span>' + badge + '</div>';
+    }).join('');
+  }
+
+  function renderMiniCal() {
+    var monthLabel = document.getElementById('tr-cal-month-label');
+    if (monthLabel) monthLabel.textContent = MESES[TR.calMonth.getMonth()] + ' ' + TR.calMonth.getFullYear();
+
+    var container = document.getElementById('tr-cal-days');
+    if (!container) return;
+
+    var year  = TR.calMonth.getFullYear();
+    var month = TR.calMonth.getMonth();
+    var first = new Date(year, month, 1).getDay();
+    var days  = new Date(year, month+1, 0).getDate();
+    var today = new Date();
+
+    var html = '';
+    for (var i = 0; i < first; i++) html += '<div class="tr-cal-day empty"></div>';
+    for (var d = 1; d <= days; d++) {
+      var date = new Date(year, month, d);
+      var ds   = toDateStr(date);
+      var cls  = 'tr-cal-day';
+      if (sameDay(date, TR.selectedDate)) cls += ' selected';
+      if (sameDay(date, today)) cls += ' today';
+      if (TR.allTurnos[ds] && TR.allTurnos[ds].length > 0) cls += ' has-turnos';
+      html += '<div class="' + cls + '" onclick="TR_selectDate(\'' + ds + '\')">' + d + '</div>';
+    }
+    container.innerHTML = html;
+  }
+
+  function loadDisponibles() {
+    var dateStr = toDateStr(TR.selectedDate);
+    apiFetch('/turnos/disponibles?fecha=' + dateStr)
+      .then(function(slots) {
+        TR.disponibles = Array.isArray(slots) ? slots : [];
+        renderDayView();
+      })
+      .catch(function() { TR.disponibles = []; renderDayView(); });
+  }
+
+  function loadTurnos(dateStr) {
+    apiFetch('/turnos' + (dateStr ? '?fecha=' + dateStr : ''))
+      .then(function(rows) {
+        if (!Array.isArray(rows)) return;
+        if (dateStr) {
+          TR.allTurnos[dateStr] = rows;
+        } else {
+          // full reload
+          TR.allTurnos = {};
+          rows.forEach(function(t) {
+            var ds = t.fecha ? t.fecha.slice(0,10) : null;
+            if (!ds) return;
+            if (!TR.allTurnos[ds]) TR.allTurnos[ds] = [];
+            TR.allTurnos[ds].push(t);
+          });
+        }
+        renderDayView();
+        renderMiniCal();
+      })
+      .catch(function(){});
+  }
+
+  window._turnosLoad = function () {
+    renderDateLabel();
+    renderMiniCal();
+    loadTurnos();
+    loadDisponibles();
+    loadDispGrid();
+  };
+
+  window._resetTurnos = function () {
+    TR.allTurnos   = {};
+    TR.disponibles = [];
+    TR.activeTurno = null;
+    TR.selectedDate = new Date();
+    TR.calMonth     = new Date();
+  };
+
+  window.TR_prevDay = function () {
+    TR.selectedDate.setDate(TR.selectedDate.getDate() - 1);
+    renderDateLabel(); loadDisponibles();
+    loadTurnos(toDateStr(TR.selectedDate)); renderMiniCal();
+  };
+  window.TR_nextDay = function () {
+    TR.selectedDate.setDate(TR.selectedDate.getDate() + 1);
+    renderDateLabel(); loadDisponibles();
+    loadTurnos(toDateStr(TR.selectedDate)); renderMiniCal();
+  };
+  window.TR_goToday = function () {
+    TR.selectedDate = new Date();
+    TR.calMonth = new Date(TR.selectedDate);
+    renderDateLabel(); loadDisponibles();
+    loadTurnos(toDateStr(TR.selectedDate)); renderMiniCal();
+  };
+  window.TR_selectDate = function (ds) {
+    TR.selectedDate = new Date(ds + 'T12:00:00');
+    renderDateLabel(); loadDisponibles();
+    loadTurnos(ds); renderMiniCal();
+  };
+  window.TR_calPrevMonth = function () {
+    TR.calMonth.setMonth(TR.calMonth.getMonth() - 1);
+    renderMiniCal();
+  };
+  window.TR_calNextMonth = function () {
+    TR.calMonth.setMonth(TR.calMonth.getMonth() + 1);
+    renderMiniCal();
+  };
+
+  window.TR_openModal = function (id) {
+    var dateStr = toDateStr(TR.selectedDate);
+    var dayTurnos = TR.allTurnos[dateStr] || [];
+    var t = dayTurnos.find(function(x){ return x.id === id; });
+    if (!t) return;
+    TR.activeTurno = t;
+    var title = document.getElementById('tr-modal-title');
+    var body  = document.getElementById('tr-modal-body');
+    if (title) title.textContent = t.hora + ' — ' + (t.servicio || 'Turno');
+    if (body) body.innerHTML =
+      '<strong>Cliente:</strong> ' + (t.nombre_cliente || '—') + '<br>' +
+      '<strong>Teléfono:</strong> ' + (t.telefono_cliente || '—') + '<br>' +
+      '<strong>Fecha:</strong> ' + (t.fecha ? t.fecha.slice(0,10) : '—') + '<br>' +
+      '<strong>Hora:</strong> ' + t.hora + '<br>' +
+      '<strong>Estado:</strong> ' + t.estado;
+    var modal = document.getElementById('tr-modal');
+    if (modal) modal.classList.remove('hidden');
+    // hide buttons if already cancelled/completed
+    var cb = document.getElementById('tr-modal-cancel-btn');
+    var db = document.getElementById('tr-modal-done-btn');
+    if (cb) cb.style.display = t.estado === 'reservado' ? '' : 'none';
+    if (db) db.style.display = t.estado === 'reservado' ? '' : 'none';
+  };
+
+  window.TR_closeModal = function () {
+    var modal = document.getElementById('tr-modal');
+    if (modal) modal.classList.add('hidden');
+    TR.activeTurno = null;
+  };
+
+  function patchTurno(estado) {
+    if (!TR.activeTurno) return;
+    apiFetch('/turnos/' + TR.activeTurno.id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: estado })
+    }).then(function() {
+      TR_closeModal();
+      loadTurnos(toDateStr(TR.selectedDate));
+    }).catch(function() { alert('No se pudo actualizar el turno'); });
+  }
+
+  window.TR_cancelTurno   = function () { patchTurno('cancelado'); };
+  window.TR_completeTurno = function () { patchTurno('completado'); };
+
+  // ── Disponibilidad config tab ────────────────────────────────────────────────
+
+  var DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var dispData = {};  // dia_semana -> {hora_inicio, hora_fin, duracion_minutos, activo}
+
+  function loadDispGrid() {
+    apiFetch('/disponibilidad')
+      .then(function(rows) {
+        dispData = {};
+        (rows || []).forEach(function(r) { dispData[r.dia_semana] = r; });
+        renderDispGrid();
+      })
+      .catch(function() {});
+  }
+
+  function renderDispGrid() {
+    var grid = document.getElementById('disp-grid');
+    if (!grid) return;
+    var html = '';
+    for (var d = 0; d < 7; d++) {
+      var row = dispData[d] || { dia_semana: d, hora_inicio: '09:00', hora_fin: '18:00', duracion_minutos: 30, activo: false };
+      html += '<div class="disp-row" id="disp-row-' + d + '">' +
+        '<label class="toggle-switch">' +
+          '<input type="checkbox" id="disp-activo-' + d + '" ' + (row.activo ? 'checked' : '') + '>' +
+          '<span class="toggle-slider"></span>' +
+        '</label>' +
+        '<span class="disp-day-label">' + DIAS_SEMANA[d] + '</span>' +
+        '<input class="disp-time-input" type="time" id="disp-ini-' + d + '" value="' + (row.hora_inicio || '09:00') + '">' +
+        '<span style="font-size:12px;color:var(--muted)">a</span>' +
+        '<input class="disp-time-input" type="time" id="disp-fin-' + d + '" value="' + (row.hora_fin || '18:00') + '">' +
+      '</div>';
+    }
+    grid.innerHTML = html;
+  }
+
+  window.onTurnoDuracionChange = function () {
+    var sel = document.getElementById('f-turno-duracion');
+    if (sel) TR.duracion = parseInt(sel.value, 10) || 30;
+  };
+
+  window.saveDisponibilidad = function () {
+    var payload = [];
+    var dur = parseInt((document.getElementById('f-turno-duracion') || {}).value, 10) || 30;
+    for (var d = 0; d < 7; d++) {
+      var actEl = document.getElementById('disp-activo-' + d);
+      var iniEl = document.getElementById('disp-ini-' + d);
+      var finEl = document.getElementById('disp-fin-' + d);
+      if (!actEl) continue;
+      payload.push({
+        dia_semana:       d,
+        hora_inicio:      iniEl ? iniEl.value : '09:00',
+        hora_fin:         finEl ? finEl.value : '18:00',
+        duracion_minutos: dur,
+        activo:           actEl.checked
+      });
+    }
+    apiFetch('/disponibilidad', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    }).then(function() {
+      var el = document.getElementById('disp-save-status');
+      if (el) { el.textContent = '✓ Guardado'; setTimeout(function(){ el.textContent=''; }, 2500); }
+    }).catch(function() { alert('No se pudo guardar la disponibilidad'); });
+  };
 
 })();
 </script>
