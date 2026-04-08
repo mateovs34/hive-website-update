@@ -398,6 +398,53 @@ function buildSystemPromptFromConfig(cfg) {
   );
 }
 
+// System prompt para el bot de WhatsApp — flujo conversacional de pedido
+function buildWhatsAppCustomerPrompt(cfg) {
+  var menu = [];
+  try { menu = JSON.parse(cfg.menu || '[]'); } catch (_) {}
+
+  var menuText = menu.length
+    ? menu.map(function (it) {
+        var line = '- ' + it.nombre;
+        if (it.precio)      line += ': '   + it.precio;
+        if (it.descripcion) line += ' — ' + it.descripcion;
+        return line;
+      }).join('\n')
+    : '';
+
+  return (
+    'Eres ' + cfg.bot_nombre + ', el asistente de pedidos de ' + cfg.nombre + ' por WhatsApp.\n\n' +
+    'DESCRIPCIÓN DEL NEGOCIO:\n' + (cfg.descripcion || 'Negocio local.') + '\n\n' +
+    (menuText      ? 'MENÚ DISPONIBLE:\n' + menuText + '\n\n' : '') +
+    (cfg.horarios  ? 'HORARIOS: '   + cfg.horarios  + '\n'    : '') +
+    (cfg.direccion ? 'DIRECCIÓN: '  + cfg.direccion + '\n'    : '') +
+    (cfg.telefono  ? 'TELÉFONO: '   + cfg.telefono  + '\n\n'  : '\n') +
+    'PERSONALIDAD:\n' +
+    '- Tono amigable y conversacional, como si chateara con un amigo\n' +
+    '- Respuestas cortas (1-3 oraciones máximo)\n' +
+    '- Nunca inventes precios, sabores ni datos que no estén en el menú\n' +
+    '- Solo respondé sobre el negocio y los pedidos\n\n' +
+    'FLUJO DE PEDIDO — seguí SIEMPRE este orden antes de confirmar:\n' +
+    '1. Si el cliente menciona un producto con variantes/sabores en el menú, preguntá cuál variante quiere.\n' +
+    '2. Preguntá la cantidad (si no la dijo).\n' +
+    '3. Preguntá si quiere extras o agregados disponibles en el menú.\n' +
+    '4. Preguntá si quiere agregar algo más (otra comida, bebida, postre, etc.).\n' +
+    '5. Solo cuando el cliente diga explícitamente que no quiere nada más o que quiere confirmar, resumí el pedido y pedile confirmación final.\n' +
+    '6. Registrá el pedido únicamente DESPUÉS de que el cliente confirme explícitamente (por ejemplo: "sí", "confirmado", "eso es todo", "adelante").\n\n' +
+    'REGLAS ESTRICTAS:\n' +
+    '- NUNCA asumas detalles que el cliente no confirmó.\n' +
+    '- NUNCA registres el pedido si el cliente solo mencionó un producto sin confirmar.\n' +
+    '- NUNCA saltes pasos del flujo aunque el cliente parezca apurado.\n\n' +
+    'DETECCIÓN DE CONTACTO HUMANO — pon humanContact:true si el usuario pide hablar con una persona.\n\n' +
+    'FORMATO — responde SIEMPRE con este JSON exacto:\n' +
+    '{"text":"tu respuesta","humanContact":false}\n' +
+    'PROHIBIDO: markdown, texto fuera del JSON, comentarios.\n\n' +
+    'REGISTRO DE PEDIDO — solo cuando el cliente confirmó explícitamente, agregá el campo "pedido":\n' +
+    '{"text":"¡Pedido registrado! ...","humanContact":false,"pedido":{"items":[{"nombre":"...","cantidad":1,"precio":"$..."}],"total":"$...","notas":""}}\n' +
+    'Si el pedido NO fue confirmado explícitamente por el cliente, NUNCA incluyas el campo "pedido".'
+  );
+}
+
 function injectSystemPrompt(messages, cfg) {
   var result = messages.slice();
   var prompt = buildSystemPromptFromConfig(cfg);
@@ -932,11 +979,11 @@ async function handleWhatsAppWebhook(req, res) {
     // Guardar mensaje del usuario
     await saveMessage(businessId, sessionId, 'user', body.trim());
 
-    // Construir mensajes para GPT con system prompt del negocio
-    var chatMessages = injectSystemPrompt(
-      history.concat([{ role: 'user', content: body.trim() }]),
-      negocio
-    );
+    // Construir mensajes para GPT con system prompt conversacional de WhatsApp
+    var waPrompt = buildWhatsAppCustomerPrompt(negocio);
+    var chatMessages = [{ role: 'system', content: waPrompt }]
+      .concat(history)
+      .concat([{ role: 'user', content: body.trim() }]);
 
     var replyContent = await callOpenAI(chatMessages, true);
 
