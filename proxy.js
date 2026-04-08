@@ -59,6 +59,8 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
 console.log('[Twilio] cliente:', twilioClient ? 'OK' : 'NULL - variables faltantes');
 console.log('[Twilio] ACCOUNT_SID presente:', !!process.env.TWILIO_ACCOUNT_SID);
 console.log('[Twilio] AUTH_TOKEN presente:', !!process.env.TWILIO_AUTH_TOKEN);
+var _t = process.env.TWILIO_AUTH_TOKEN || '';
+console.log('[Twilio] AUTH_TOKEN preview:', _t ? _t.slice(0, 4) + '…' + _t.slice(-4) : '(vacío)');
 
 // ── Base de datos ─────────────────────────────────────────────────────────────
 
