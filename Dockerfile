@@ -10,6 +10,7 @@ COPY dashboard.html ./
 COPY config.html ./
 COPY admin.html ./
 COPY demo.html ./
+COPY tour.html ./
 RUN mkdir -p /data
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
