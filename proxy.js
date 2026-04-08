@@ -151,6 +151,80 @@ function parseUrl(req) {
   };
 }
 
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+//
+//  chatLimitIp  : Map<ip,  { count, resetAt }>   — 20 req/hora por IP
+//  chatLimitBid : Map<bid, { count, resetAt }>   — 100 req/hora por businessId
+//  loginFails   : Map<ip,  { count, resetAt }>   — 5 intentos fallidos / 15 min
+
+var chatLimitIp  = new Map();
+var chatLimitBid = new Map();
+var loginFails   = new Map();
+
+var CHAT_IP_MAX   = 20;
+var CHAT_BID_MAX  = 100;
+var CHAT_WINDOW   = 60 * 60 * 1000;       // 1 hora en ms
+var LOGIN_MAX     = 5;
+var LOGIN_WINDOW  = 15 * 60 * 1000;       // 15 minutos en ms
+
+// Limpieza automática cada hora
+setInterval(function () {
+  var now = Date.now();
+  chatLimitIp.forEach(function (v, k)  { if (v.resetAt <= now) chatLimitIp.delete(k);  });
+  chatLimitBid.forEach(function (v, k) { if (v.resetAt <= now) chatLimitBid.delete(k); });
+  loginFails.forEach(function (v, k)   { if (v.resetAt <= now) loginFails.delete(k);   });
+}, CHAT_WINDOW);
+
+function checkChatLimit(ip, businessId) {
+  var now = Date.now();
+
+  // Por IP
+  var ipEntry = chatLimitIp.get(ip);
+  if (!ipEntry || ipEntry.resetAt <= now) {
+    ipEntry = { count: 0, resetAt: now + CHAT_WINDOW };
+    chatLimitIp.set(ip, ipEntry);
+  }
+  if (ipEntry.count >= CHAT_IP_MAX) return false;
+
+  // Por businessId
+  var bidEntry = chatLimitBid.get(businessId);
+  if (!bidEntry || bidEntry.resetAt <= now) {
+    bidEntry = { count: 0, resetAt: now + CHAT_WINDOW };
+    chatLimitBid.set(businessId, bidEntry);
+  }
+  if (bidEntry.count >= CHAT_BID_MAX) return false;
+
+  // Ambos dentro del límite: incrementar
+  ipEntry.count++;
+  bidEntry.count++;
+  return true;
+}
+
+function recordLoginFail(ip) {
+  var now = Date.now();
+  var entry = loginFails.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    entry = { count: 0, resetAt: now + LOGIN_WINDOW };
+    loginFails.set(ip, entry);
+  }
+  entry.count++;
+}
+
+function clearLoginFails(ip) {
+  loginFails.delete(ip);
+}
+
+function isLoginBlocked(ip) {
+  var now   = Date.now();
+  var entry = loginFails.get(ip);
+  return !!(entry && entry.resetAt > now && entry.count >= LOGIN_MAX);
+}
+
+function getClientIp(req) {
+  var fwd = req.headers['x-forwarded-for'];
+  return (fwd ? fwd.split(',')[0] : req.socket.remoteAddress || '').trim();
+}
+
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 function verifyToken(req) {
@@ -576,7 +650,7 @@ async function handleRegister(res, raw) {
 }
 
 // POST /auth/login
-async function handleLogin(res, raw) {
+async function handleLogin(res, raw, ip) {
   var body;
   try { body = JSON.parse(raw); } catch (_) {
     return sendJSON(res, 400, { error: 'invalid_json' });
@@ -586,7 +660,11 @@ async function handleLogin(res, raw) {
   // Admin login (sin businessId)
   if (!body.businessId) {
     if (!ADMIN_PASSWORD) return sendJSON(res, 403, { error: 'Admin no configurado (falta ADMIN_PASSWORD)' });
-    if (pass !== ADMIN_PASSWORD) return sendJSON(res, 401, { error: 'Contraseña incorrecta' });
+    if (pass !== ADMIN_PASSWORD) {
+      if (ip) recordLoginFail(ip);
+      return sendJSON(res, 401, { error: 'Contraseña incorrecta' });
+    }
+    if (ip) clearLoginFails(ip);
     var tok = jwt.sign({ role: 'admin' }, SECRET_KEY, { expiresIn: '24h' });
     return sendJSON(res, 200, { ok: true, token: tok, role: 'admin' });
   }
@@ -598,11 +676,21 @@ async function handleLogin(res, raw) {
       `SELECT business_id, nombre, password_hash FROM negocios WHERE business_id = $1`,
       [bid]
     );
-    if (result.rows.length === 0) return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    if (result.rows.length === 0) {
+      if (ip) recordLoginFail(ip);
+      return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    }
     var row = result.rows[0];
-    if (!row.password_hash) return sendJSON(res, 401, { error: 'Este negocio no tiene contraseña configurada' });
+    if (!row.password_hash) {
+      if (ip) recordLoginFail(ip);
+      return sendJSON(res, 401, { error: 'Este negocio no tiene contraseña configurada' });
+    }
     var valid = await bcrypt.compare(pass, row.password_hash);
-    if (!valid) return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    if (!valid) {
+      if (ip) recordLoginFail(ip);
+      return sendJSON(res, 401, { error: 'Credenciales inválidas' });
+    }
+    if (ip) clearLoginFails(ip);
     var token = jwt.sign({ businessId: bid, role: 'business' }, SECRET_KEY, { expiresIn: '7d' });
     sendJSON(res, 200, { ok: true, token: token, businessId: bid, nombre: row.nombre });
   } catch (e) {
@@ -673,7 +761,11 @@ var server = http.createServer(function (req, res) {
   }
 
   if (req.method === 'POST' && u.path === '/auth/login') {
-    return readBody(req).then(function (r) { return handleLogin(res, r); })
+    var loginIp = getClientIp(req);
+    if (isLoginBlocked(loginIp)) {
+      return sendJSON(res, 429, { error: 'Demasiados intentos, esperá 15 minutos' });
+    }
+    return readBody(req).then(function (r) { return handleLogin(res, r, loginIp); })
       .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
   }
 
@@ -713,6 +805,7 @@ var server = http.createServer(function (req, res) {
   // POST /chat  (público — lo usa el widget)
   if (req.method === 'POST' && u.path === '/chat') {
     return readBody(req).then(async function (raw) {
+      var chatIp = getClientIp(req);
       var body; try { body = JSON.parse(raw); } catch (_) {
         return sendJSON(res, 400, { error: 'invalid_json' });
       }
@@ -721,6 +814,10 @@ var server = http.createServer(function (req, res) {
       }
       var businessId = body.businessId || 'default';
       var sessionId  = body.sessionId  || null;
+
+      if (!checkChatLimit(chatIp, businessId)) {
+        return sendJSON(res, 429, { error: 'Límite de mensajes alcanzado, intentá en unos minutos' });
+      }
 
       var cfgResult = await pool.query(`SELECT * FROM negocios WHERE business_id = $1`, [businessId]);
       var cfg       = cfgResult.rows[0] || null;
