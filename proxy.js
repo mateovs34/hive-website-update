@@ -170,6 +170,35 @@ async function initSchema() {
     );
   `);
 
+  // Tablas de inventario
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS productos (
+      id             SERIAL PRIMARY KEY,
+      business_id    TEXT NOT NULL REFERENCES negocios(business_id) ON DELETE CASCADE,
+      nombre         TEXT NOT NULL,
+      descripcion    TEXT NOT NULL DEFAULT '',
+      precio_venta   NUMERIC(12,2) NOT NULL DEFAULT 0,
+      precio_costo   NUMERIC(12,2) NOT NULL DEFAULT 0,
+      stock_actual   INTEGER NOT NULL DEFAULT 0,
+      stock_minimo   INTEGER NOT NULL DEFAULT 0,
+      categoria      TEXT NOT NULL DEFAULT 'General',
+      activo         BOOLEAN NOT NULL DEFAULT true,
+      creado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS movimientos_stock (
+      id          SERIAL PRIMARY KEY,
+      business_id TEXT NOT NULL REFERENCES negocios(business_id) ON DELETE CASCADE,
+      producto_id INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+      tipo        TEXT NOT NULL CHECK (tipo IN ('entrada','salida','ajuste')),
+      cantidad    INTEGER NOT NULL,
+      motivo      TEXT NOT NULL DEFAULT '',
+      session_id  TEXT,
+      creado_en   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
   // Columnas de turnos en negocios (migraciones no destructivas)
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turnos_activos INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turno_servicio TEXT NOT NULL DEFAULT 'Consulta'`);
@@ -487,9 +516,44 @@ async function saveTurnoIfDetected(businessId, sessionId, parsed) {
   } catch (e) { console.error('[DB] saveTurno:', e.message); }
 }
 
+// ── Helpers de inventario ─────────────────────────────────────────────────────
+
+async function getInventarioContextForPrompt(businessId) {
+  var result = await pool.query(
+    `SELECT id, nombre, precio_venta, stock_actual FROM productos
+     WHERE business_id = $1 AND activo = true ORDER BY nombre`,
+    [businessId]
+  );
+  if (result.rows.length === 0) return null;
+  var lines = result.rows.map(function (p) {
+    var stockLabel = p.stock_actual > 0 ? 'stock: ' + p.stock_actual : 'SIN STOCK';
+    return '- ' + p.nombre + ' ($' + Number(p.precio_venta).toFixed(2) + ') [' + stockLabel + '] (id:' + p.id + ')';
+  });
+  return 'INVENTARIO DISPONIBLE:\n' + lines.join('\n');
+}
+
+async function saveVentaIfDetected(businessId, sessionId, parsed) {
+  if (!parsed || !parsed.venta) return;
+  var v = parsed.venta;
+  if (!v.producto_id || !v.cantidad) return;
+  try {
+    var cantidad = parseInt(v.cantidad, 10) || 1;
+    await pool.query(`
+      INSERT INTO movimientos_stock (business_id, producto_id, tipo, cantidad, motivo, session_id)
+      VALUES ($1, $2, 'salida', $3, 'Venta por chat', $4)
+    `, [businessId, v.producto_id, cantidad, sessionId || null]);
+    await pool.query(
+      `UPDATE productos SET stock_actual = GREATEST(0, stock_actual - $1), actualizado_en = NOW()
+       WHERE id = $2 AND business_id = $3`,
+      [cantidad, v.producto_id, businessId]
+    );
+    console.log('[DB] Venta registrada — producto:', v.producto_id, 'cantidad:', cantidad);
+  } catch (e) { console.error('[DB] saveVenta:', e.message); }
+}
+
 // ── System prompt desde config ────────────────────────────────────────────────
 
-function buildSystemPromptFromConfig(cfg, turnoContext) {
+function buildSystemPromptFromConfig(cfg, turnoContext, inventarioContext) {
   var menu = [];
   try { menu = JSON.parse(cfg.menu || '[]'); } catch (_) {}
 
@@ -515,10 +579,17 @@ function buildSystemPromptFromConfig(cfg, turnoContext) {
       'Si no se está reservando un turno, omitir el campo "turno".\n\n';
   }
 
+  var ventaInstructions = inventarioContext
+    ? 'REGISTRO DE VENTA — cuando el cliente confirme la compra de un producto del inventario, incluí el campo "venta":\n' +
+      '{"text":"¡Vendido!","humanContact":false,"venta":{"producto_id":123,"cantidad":1,"precio":9.99}}\n' +
+      'Usá el id del producto que aparece entre paréntesis en el inventario. Si no hay venta confirmada, omitir el campo "venta".\n\n'
+    : '';
+
   return (
     'Eres ' + cfg.bot_nombre + ', el asistente virtual de ' + cfg.nombre + '.\n\n' +
     'DESCRIPCIÓN DEL NEGOCIO:\n' + (cfg.descripcion || 'Negocio local.') + '\n\n' +
-    (menuText      ? 'MENÚ DISPONIBLE:\n' + menuText + '\n\n' : '') +
+    (menuText           ? 'MENÚ DISPONIBLE:\n' + menuText + '\n\n' : '') +
+    (inventarioContext  ? inventarioContext + '\n\n' : '') +
     (cfg.horarios  ? 'HORARIOS: '   + cfg.horarios  + '\n' : '') +
     (cfg.direccion ? 'DIRECCIÓN: '  + cfg.direccion + '\n' : '') +
     (cfg.telefono  ? 'TELÉFONO: '   + cfg.telefono  + '\n\n' : '\n') +
@@ -527,7 +598,8 @@ function buildSystemPromptFromConfig(cfg, turnoContext) {
     '- Adaptate al tono del usuario\n' +
     '- Sé empático, servicial y conciso (máximo 3-4 oraciones)\n' +
     '- Solo respondé sobre lo que está en el contexto del negocio\n' +
-    '- Nunca inventes precios ni datos que no estén en el contexto\n\n' +
+    '- Nunca inventes precios ni datos que no estén en el contexto\n' +
+    '- Si te preguntan disponibilidad de un producto, consultá el inventario\n\n' +
     'DETECCIÓN DE CONTACTO HUMANO — pon humanContact:true si el usuario pide hablar con una persona.\n\n' +
     'FORMATO — responde SIEMPRE con este JSON exacto:\n' +
     '{"text":"tu respuesta","humanContact":false}\n' +
@@ -535,6 +607,7 @@ function buildSystemPromptFromConfig(cfg, turnoContext) {
     'DETECCIÓN DE PEDIDOS — cuando el usuario confirme un pedido, agregá el campo "pedido":\n' +
     '{"text":"¡Anotado!","humanContact":false,"pedido":{"items":[{"nombre":"...","cantidad":1,"precio":"$..."}],"total":"$...","notas":""}}\n' +
     'Si no hay pedido confirmado, omitir el campo "pedido".\n\n' +
+    ventaInstructions +
     turnoInstructions
   );
 }
@@ -590,9 +663,9 @@ function buildWhatsAppCustomerPrompt(cfg) {
   );
 }
 
-function injectSystemPrompt(messages, cfg, turnoContext) {
+function injectSystemPrompt(messages, cfg, turnoContext, inventarioContext) {
   var result = messages.slice();
-  var prompt = buildSystemPromptFromConfig(cfg, turnoContext);
+  var prompt = buildSystemPromptFromConfig(cfg, turnoContext, inventarioContext);
   var idx    = result.findIndex(function (m) { return m.role === 'system'; });
   if (idx !== -1) {
     result[idx] = { role: 'system', content: prompt };
@@ -642,6 +715,7 @@ function forwardToOpenAI(messages, businessId, sessionId, res) {
           saveMessage(businessId, sessionId, 'assistant', content).catch(function () {});
           savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
           saveTurnoIfDetected(businessId, sessionId, parsed).catch(function () {});
+          saveVentaIfDetected(businessId, sessionId, parsed).catch(function () {});
         } catch (_) {}
       }
     });
@@ -894,6 +968,163 @@ async function handlePatchPedido(id, businessId, res, raw) {
     }
 
     sendJSON(res, 200, { ok: true, id: id, estado: body.estado });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// ── Handlers de inventario ────────────────────────────────────────────────────
+
+// GET /productos?businessId=xxx
+async function handleGetProductos(businessId, res) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var result = await pool.query(
+      `SELECT id, nombre, descripcion, precio_venta, precio_costo, stock_actual, stock_minimo, categoria, activo, creado_en, actualizado_en
+       FROM productos WHERE business_id = $1 AND activo = true ORDER BY categoria, nombre`,
+      [businessId]
+    );
+    sendJSON(res, 200, result.rows);
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// POST /productos?businessId=xxx
+async function handlePostProducto(businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  if (!body.nombre) return sendJSON(res, 400, { error: 'nombre requerido' });
+  try {
+    var result = await pool.query(`
+      INSERT INTO productos (business_id, nombre, descripcion, precio_venta, precio_costo, stock_actual, stock_minimo, categoria)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+    `, [
+      businessId,
+      String(body.nombre).slice(0, 150),
+      String(body.descripcion || '').slice(0, 500),
+      parseFloat(body.precio_venta) || 0,
+      parseFloat(body.precio_costo) || 0,
+      parseInt(body.stock_actual,  10) || 0,
+      parseInt(body.stock_minimo,  10) || 0,
+      String(body.categoria || 'General').slice(0, 100)
+    ]);
+    var id = result.rows[0].id;
+    // Si hay stock inicial, registrar movimiento de entrada
+    if ((parseInt(body.stock_actual, 10) || 0) > 0) {
+      await pool.query(
+        `INSERT INTO movimientos_stock (business_id, producto_id, tipo, cantidad, motivo)
+         VALUES ($1, $2, 'entrada', $3, 'Stock inicial')`,
+        [businessId, id, parseInt(body.stock_actual, 10)]
+      );
+    }
+    sendJSON(res, 201, { ok: true, id: id });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// PUT /productos/:id?businessId=xxx
+async function handlePutProducto(id, businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  try {
+    var result = await pool.query(`
+      UPDATE productos SET
+        nombre        = COALESCE($1, nombre),
+        descripcion   = COALESCE($2, descripcion),
+        precio_venta  = COALESCE($3, precio_venta),
+        precio_costo  = COALESCE($4, precio_costo),
+        stock_minimo  = COALESCE($5, stock_minimo),
+        categoria     = COALESCE($6, categoria),
+        actualizado_en = NOW()
+      WHERE id = $7 AND business_id = $8 RETURNING id
+    `, [
+      body.nombre      != null ? String(body.nombre).slice(0, 150)      : null,
+      body.descripcion != null ? String(body.descripcion).slice(0, 500) : null,
+      body.precio_venta != null ? parseFloat(body.precio_venta) : null,
+      body.precio_costo != null ? parseFloat(body.precio_costo) : null,
+      body.stock_minimo != null ? parseInt(body.stock_minimo, 10) : null,
+      body.categoria    != null ? String(body.categoria).slice(0, 100) : null,
+      id, businessId
+    ]);
+    if (result.rowCount === 0) return sendJSON(res, 404, { error: 'not_found' });
+    sendJSON(res, 200, { ok: true });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// DELETE /productos/:id?businessId=xxx  (soft delete)
+async function handleDeleteProducto(id, businessId, res) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var result = await pool.query(
+      `UPDATE productos SET activo = false, actualizado_en = NOW() WHERE id = $1 AND business_id = $2 RETURNING id`,
+      [id, businessId]
+    );
+    if (result.rowCount === 0) return sendJSON(res, 404, { error: 'not_found' });
+    sendJSON(res, 200, { ok: true });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// POST /productos/:id/movimiento?businessId=xxx
+async function handlePostMovimiento(productoId, businessId, res, raw) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var tiposValidos = ['entrada', 'salida', 'ajuste'];
+  if (!tiposValidos.includes(body.tipo)) return sendJSON(res, 400, { error: 'tipo inválido' });
+  var cantidad = parseInt(body.cantidad, 10);
+  if (!cantidad || cantidad <= 0) return sendJSON(res, 400, { error: 'cantidad debe ser > 0' });
+  try {
+    // Verificar que el producto pertenece al negocio
+    var check = await pool.query(`SELECT id, stock_actual FROM productos WHERE id = $1 AND business_id = $2 AND activo = true`, [productoId, businessId]);
+    if (check.rows.length === 0) return sendJSON(res, 404, { error: 'producto no encontrado' });
+
+    await pool.query(
+      `INSERT INTO movimientos_stock (business_id, producto_id, tipo, cantidad, motivo, session_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [businessId, productoId, body.tipo, cantidad, String(body.motivo || '').slice(0, 200), body.session_id || null]
+    );
+
+    // Actualizar stock_actual según tipo
+    var delta = body.tipo === 'entrada' ? cantidad : body.tipo === 'salida' ? -cantidad : 0;
+    if (body.tipo === 'ajuste') {
+      await pool.query(
+        `UPDATE productos SET stock_actual = $1, actualizado_en = NOW() WHERE id = $2 AND business_id = $3`,
+        [cantidad, productoId, businessId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE productos SET stock_actual = GREATEST(0, stock_actual + $1), actualizado_en = NOW() WHERE id = $2 AND business_id = $3`,
+        [delta, productoId, businessId]
+      );
+    }
+    sendJSON(res, 201, { ok: true });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// GET /productos/movimientos?businessId=xxx
+async function handleGetMovimientos(businessId, res, query) {
+  if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var params = [businessId];
+    var where  = 'WHERE m.business_id = $1';
+    if (query.producto_id) {
+      params.push(query.producto_id);
+      where += ' AND m.producto_id = $' + params.length;
+    }
+    if (query.tipo) {
+      params.push(query.tipo);
+      where += ' AND m.tipo = $' + params.length;
+    }
+    var result = await pool.query(`
+      SELECT m.id, m.producto_id, p.nombre AS producto_nombre, m.tipo, m.cantidad, m.motivo, m.session_id, m.creado_en
+      FROM movimientos_stock m
+      JOIN productos p ON p.id = m.producto_id
+      ${where}
+      ORDER BY m.creado_en DESC
+      LIMIT 200
+    `, params);
+    sendJSON(res, 200, result.rows);
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
@@ -1180,13 +1411,21 @@ async function handleLogin(res, raw, ip) {
 }
 
 // GET /auth/verify
-function handleVerify(req, res) {
+async function handleVerify(req, res) {
   var payload = verifyToken(req);
   if (!payload) return sendJSON(res, 401, { error: 'Token inválido o expirado' });
+  var nombre = null;
+  if (payload.businessId) {
+    try {
+      var r = await pool.query('SELECT nombre FROM negocios WHERE business_id = $1', [payload.businessId]);
+      nombre = r.rows[0] ? r.rows[0].nombre : null;
+    } catch (_) {}
+  }
   sendJSON(res, 200, {
     valid:      true,
     businessId: payload.businessId || null,
-    role:       payload.role || 'business'
+    role:       payload.role || 'business',
+    nombre:     nombre
   });
 }
 
@@ -1656,11 +1895,13 @@ var server = http.createServer(function (req, res) {
 
       var cfgResult = await pool.query(`SELECT * FROM negocios WHERE business_id = $1`, [businessId]);
       var cfg       = cfgResult.rows[0] || null;
-      var turnoCtx  = null;
+      var turnoCtx    = null;
+      var inventCtx   = null;
       if (cfg && cfg.turnos_activos) {
         try { turnoCtx = await getTurnosContextForPrompt(businessId); } catch (_) {}
       }
-      var messages  = cfg ? injectSystemPrompt(body.messages, cfg, turnoCtx) : body.messages;
+      try { inventCtx = await getInventarioContextForPrompt(businessId); } catch (_) {}
+      var messages  = cfg ? injectSystemPrompt(body.messages, cfg, turnoCtx, inventCtx) : body.messages;
 
       if (sessionId) {
         await ensureSession(businessId, sessionId);
@@ -1718,6 +1959,50 @@ var server = http.createServer(function (req, res) {
     if (!verifyToken(req)) return sendUnauthorized(res);
     return handleGetMensajes(decodeURIComponent(convMatch[1]), res)
       .catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // ── Endpoints de inventario ───────────────────────────────────────────────
+
+  // GET /productos/movimientos?businessId=xxx  (antes de /productos/:id para evitar conflicto)
+  if (req.method === 'GET' && u.path === '/productos/movimientos') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleGetMovimientos(bid, res, u.query).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // GET /productos?businessId=xxx
+  if (req.method === 'GET' && u.path === '/productos') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleGetProductos(bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // POST /productos?businessId=xxx
+  if (req.method === 'POST' && u.path === '/productos') {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handlePostProducto(bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  var prodMatch  = u.path.match(/^\/productos\/(\d+)$/);
+  var moviMatch  = u.path.match(/^\/productos\/(\d+)\/movimiento$/);
+
+  // POST /productos/:id/movimiento?businessId=xxx
+  if (req.method === 'POST' && moviMatch) {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handlePostMovimiento(parseInt(moviMatch[1], 10), bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // PUT /productos/:id?businessId=xxx
+  if (req.method === 'PUT' && prodMatch) {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handlePutProducto(parseInt(prodMatch[1], 10), bid, res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // DELETE /productos/:id?businessId=xxx
+  if (req.method === 'DELETE' && prodMatch) {
+    if (!isBusiness(req, bid)) return sendUnauthorized(res);
+    return handleDeleteProducto(parseInt(prodMatch[1], 10), bid, res).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
   }
 
   // ── Endpoints de turnos ───────────────────────────────────────────────────

@@ -953,6 +953,75 @@
       .stats-bar   { grid-template-columns: 1fr 1fr; }
     }
 
+    /* ── Inventario ─────────────────────────────────────────────────────────── */
+    #section-inventario { flex-direction: column; overflow: hidden; }
+    .inv-tabs-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .inv-tab-btn { padding: 12px 20px; background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; font-family: inherit; }
+    .inv-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .inv-tab-panel { display: none; flex: 1; overflow-y: auto; padding: 16px; }
+    .inv-tab-panel.active { display: flex; flex-direction: column; gap: 16px; }
+    /* Productos grid */
+    .inv-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .inv-search { flex: 1; min-width: 160px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+    .inv-search::placeholder { color: var(--muted); }
+    .inv-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .inv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; transition: border-color .15s; display: flex; flex-direction: column; gap: 6px; }
+    .inv-card:hover { border-color: var(--accent); }
+    .inv-card-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .inv-card-icon { font-size: 28px; text-align: center; padding: 8px 0; }
+    .inv-card-name { font-size: 14px; font-weight: 700; }
+    .inv-card-cat { font-size: 11px; color: var(--muted); }
+    .inv-card-desc { font-size: 12px; color: var(--muted); min-height: 16px; }
+    .inv-card-price { font-size: 15px; font-weight: 700; color: var(--accent); }
+    .inv-card-prices { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+    .inv-card-prices strong { color: var(--text); }
+    .inv-card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+    .inv-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .inv-stock-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .inv-stock-badge.ok     { background: var(--green-bg);  color: var(--green); }
+    .inv-stock-badge.warn   { background: var(--yellow-bg); color: var(--yellow); }
+    .inv-stock-badge.empty  { background: var(--red-bg);    color: var(--red); }
+    /* Movimientos table */
+    .inv-table-wrap { overflow-x: auto; }
+    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .inv-table th { text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .inv-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    .inv-tipo-badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+    .inv-tipo-badge.entrada { background: var(--green-bg);  color: var(--green); }
+    .inv-tipo-badge.salida  { background: var(--red-bg);    color: var(--red); }
+    .inv-tipo-badge.ajuste  { background: var(--blue-bg);   color: var(--blue); }
+    /* Analytics inventario KPIs */
+    .inv-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .inv-kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .inv-kpi-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+    .inv-kpi-value { font-size: 22px; font-weight: 800; }
+    .inv-kpi-value.green  { color: var(--green); }
+    .inv-kpi-value.yellow { color: var(--yellow); }
+    .inv-kpi-value.red    { color: var(--red); }
+    .inv-kpi-value.accent { color: var(--accent); }
+    .inv-chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    .inv-chart-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+    /* Modal inventario */
+    .inv-modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 990; }
+    .inv-modal.hidden { display: none; }
+    .inv-modal-box { background: var(--surface2); border-radius: 14px; padding: 24px; width: 90%; max-width: 440px; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+    .inv-modal-title { font-size: 17px; font-weight: 700; margin-bottom: 18px; }
+    .inv-form-row { margin-bottom: 12px; }
+    .inv-form-row label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+    .inv-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 13px; box-sizing: border-box; font-family: inherit; }
+    .inv-input:focus { border-color: var(--accent); outline: none; }
+    .inv-modal-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+    .inv-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 768px) {
+      .inv-kpi-row { grid-template-columns: 1fr 1fr; }
+      .inv-product-grid { grid-template-columns: 1fr 1fr; }
+      .inv-tab-btn { padding: 10px 12px; font-size: 12px; }
+    }
+    @media (max-width: 420px) {
+      .inv-kpi-row { grid-template-columns: 1fr; }
+      .inv-product-grid { grid-template-columns: 1fr; }
+    }
+
     /* ── Turnos ─────────────────────────────────────────────────────────────── */
     #section-turnos { flex-direction: column; overflow: hidden; }
     .tr-layout { display: flex; flex: 1; gap: 16px; padding: 16px; overflow: hidden; }
@@ -1122,6 +1191,10 @@
         <span class="nav-icon">📊</span>
         <span>Pedidos</span>
         <span class="nav-badge" id="nav-pending-badge"></span>
+      </button>
+      <button class="nav-item" id="nav-inventario" onclick="showSection('inventario')">
+        <span class="nav-icon">📦</span>
+        <span>Inventario</span>
       </button>
       <button class="nav-item" id="nav-turnos" onclick="showSection('turnos')">
         <span class="nav-icon">📅</span>
@@ -1519,6 +1592,168 @@ docker compose up --build -d</div>
     </div><!-- /section-config -->
 
     <!-- ─── SECCIÓN TURNOS ─────────────────────────────────────────────── -->
+    <!-- ─── SECCIÓN INVENTARIO ──────────────────────────────────────────── -->
+    <div class="app-section hidden" id="section-inventario">
+
+      <div class="inv-tabs-bar">
+        <button class="inv-tab-btn active" id="inv-tab-productos-btn" onclick="INV_setTab('productos')">📦 Productos</button>
+        <button class="inv-tab-btn"        id="inv-tab-movimientos-btn" onclick="INV_setTab('movimientos')">📋 Movimientos</button>
+        <button class="inv-tab-btn"        id="inv-tab-analytics-btn"  onclick="INV_setTab('analytics')">📊 Analytics</button>
+      </div>
+
+      <!-- TAB PRODUCTOS -->
+      <div class="inv-tab-panel active" id="inv-panel-productos">
+        <div class="inv-toolbar">
+          <input class="inv-search" id="inv-search" type="text" placeholder="Buscar producto…" oninput="INV_filterProducts()">
+          <select class="field" id="inv-cat-filter" style="min-width:120px;font-size:13px" onchange="INV_filterProducts()">
+            <option value="">Todas las categorías</option>
+          </select>
+          <button class="btn btn-primary" onclick="INV_openNewModal()">+ Nuevo producto</button>
+        </div>
+        <div class="inv-product-grid" id="inv-product-grid">
+          <div style="color:var(--muted);font-size:14px;padding:32px;text-align:center;grid-column:1/-1" id="inv-empty">Cargando productos…</div>
+        </div>
+      </div>
+
+      <!-- TAB MOVIMIENTOS -->
+      <div class="inv-tab-panel" id="inv-panel-movimientos">
+        <div class="inv-toolbar">
+          <select class="field" id="inv-mov-prod-filter" style="min-width:160px;font-size:13px" onchange="INV_loadMovimientos()">
+            <option value="">Todos los productos</option>
+          </select>
+          <select class="field" id="inv-mov-tipo-filter" style="min-width:130px;font-size:13px" onchange="INV_loadMovimientos()">
+            <option value="">Todos los tipos</option>
+            <option value="entrada">Entrada</option>
+            <option value="salida">Salida</option>
+            <option value="ajuste">Ajuste</option>
+          </select>
+        </div>
+        <div class="inv-table-wrap">
+          <table class="inv-table">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="inv-mov-tbody">
+              <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Sin movimientos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB ANALYTICS INVENTARIO -->
+      <div class="inv-tab-panel" id="inv-panel-analytics">
+        <div class="inv-kpi-row">
+          <div class="inv-kpi-card"><div class="inv-kpi-label">Valor del stock</div><div class="inv-kpi-value accent" id="inv-kpi-valor">—</div></div>
+          <div class="inv-kpi-card"><div class="inv-kpi-label">Ganancia potencial</div><div class="inv-kpi-value green" id="inv-kpi-ganancia">—</div></div>
+          <div class="inv-kpi-card"><div class="inv-kpi-label">Agotados</div><div class="inv-kpi-value red" id="inv-kpi-agotados">—</div></div>
+          <div class="inv-kpi-card"><div class="inv-kpi-label">Bajo mínimo</div><div class="inv-kpi-value yellow" id="inv-kpi-bajo">—</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="inv-chart-box">
+            <div class="inv-chart-title">Productos más vendidos</div>
+            <canvas id="inv-chart-ventas" height="200"></canvas>
+          </div>
+          <div class="inv-chart-box">
+            <div class="inv-chart-title">Valor del inventario (30 días)</div>
+            <canvas id="inv-chart-valor" height="200"></canvas>
+          </div>
+        </div>
+        <div class="inv-chart-box">
+          <div class="inv-chart-title">Detalle de productos</div>
+          <div class="inv-table-wrap">
+            <table class="inv-table" id="inv-detail-table">
+              <thead>
+                <tr><th>Producto</th><th>Categoría</th><th>Stock</th><th>P. Venta</th><th>P. Costo</th><th>Valor stock</th><th>Margen</th></tr>
+              </thead>
+              <tbody id="inv-detail-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal nuevo/editar producto -->
+      <div class="inv-modal hidden" id="inv-prod-modal">
+        <div class="inv-modal-box">
+          <div class="inv-modal-title" id="inv-modal-title">Nuevo producto</div>
+          <input type="hidden" id="inv-modal-id">
+          <div class="inv-form-row">
+            <label>Nombre *</label>
+            <input class="inv-input" id="inv-f-nombre" type="text" placeholder="Nombre del producto" maxlength="150">
+          </div>
+          <div class="inv-form-row">
+            <label>Descripción</label>
+            <input class="inv-input" id="inv-f-descripcion" type="text" placeholder="Descripción breve" maxlength="500">
+          </div>
+          <div class="inv-form-row">
+            <label>Categoría</label>
+            <input class="inv-input" id="inv-f-categoria" type="text" placeholder="General" maxlength="100">
+          </div>
+          <div class="inv-2col">
+            <div class="inv-form-row">
+              <label>Precio venta</label>
+              <input class="inv-input" id="inv-f-precio-venta" type="number" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="inv-form-row">
+              <label>Precio costo</label>
+              <input class="inv-input" id="inv-f-precio-costo" type="number" min="0" step="0.01" placeholder="0.00">
+            </div>
+          </div>
+          <div class="inv-2col" id="inv-stock-fields">
+            <div class="inv-form-row">
+              <label>Stock inicial</label>
+              <input class="inv-input" id="inv-f-stock" type="number" min="0" step="1" placeholder="0">
+            </div>
+            <div class="inv-form-row">
+              <label>Stock mínimo</label>
+              <input class="inv-input" id="inv-f-stock-min" type="number" min="0" step="1" placeholder="0">
+            </div>
+          </div>
+          <div class="auth-error" id="inv-modal-error"></div>
+          <div class="inv-modal-actions">
+            <button class="btn btn-primary" onclick="INV_saveProduct()">Guardar</button>
+            <button class="btn btn-secondary" onclick="INV_closeModal()">Cancelar</button>
+            <button class="btn btn-danger" id="inv-delete-btn" style="margin-left:auto" onclick="INV_deleteProduct()">Eliminar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal movimiento manual -->
+      <div class="inv-modal hidden" id="inv-mov-modal">
+        <div class="inv-modal-box">
+          <div class="inv-modal-title">Registrar movimiento</div>
+          <input type="hidden" id="inv-mov-prod-id">
+          <div class="inv-form-row">
+            <label>Producto</label>
+            <div id="inv-mov-prod-nombre" style="font-size:14px;font-weight:600;padding:6px 0"></div>
+          </div>
+          <div class="inv-form-row">
+            <label>Tipo de movimiento</label>
+            <select class="inv-input" id="inv-mov-tipo">
+              <option value="entrada">Entrada (sumar stock)</option>
+              <option value="salida">Salida (restar stock)</option>
+              <option value="ajuste">Ajuste (fijar cantidad exacta)</option>
+            </select>
+          </div>
+          <div class="inv-form-row">
+            <label id="inv-mov-cantidad-label">Cantidad</label>
+            <input class="inv-input" id="inv-mov-cantidad" type="number" min="1" step="1" placeholder="1">
+          </div>
+          <div class="inv-form-row">
+            <label>Motivo</label>
+            <input class="inv-input" id="inv-mov-motivo" type="text" placeholder="Ej: Compra a proveedor, Merma…" maxlength="200">
+          </div>
+          <div class="auth-error" id="inv-mov-error"></div>
+          <div class="inv-modal-actions">
+            <button class="btn btn-primary" onclick="INV_saveMovimiento()">Registrar</button>
+            <button class="btn btn-secondary" onclick="INV_closeMovModal()">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /section-inventario -->
+
     <div class="app-section hidden" id="section-turnos">
 
       <div class="section-topbar">
@@ -1883,20 +2118,27 @@ function showAuthOverlay() {
   if (el) el.classList.remove('hidden');
 }
 
+function setSidebarName(name) {
+  var titleEl = document.getElementById('sidebar-title');
+  if (titleEl) titleEl.textContent = name || 'ChatWidget';
+  var mbn = document.getElementById('mobile-biz-name');
+  if (mbn) mbn.textContent = name || 'ChatWidget';
+}
+
 window.logout = function () {
   localStorage.removeItem('chat_token');
   // Resetear BID y estado global para que no queden datos del negocio anterior
   BID = '';
   _configLoaded = false;
-  var titleEl = document.getElementById('sidebar-title');
-  var bidEl   = document.getElementById('sidebar-bid');
-  if (titleEl) titleEl.textContent = 'ChatWidget';
-  if (bidEl)   bidEl.textContent   = '—';
+  setSidebarName('');  // limpia a "ChatWidget"
+  var bidEl = document.getElementById('sidebar-bid');
+  if (bidEl) bidEl.textContent = '—';
   window._stopDashboard   && window._stopDashboard();
   window._resetDashboard  && window._resetDashboard();
   window._resetConfig     && window._resetConfig();
   window._resetAnalytics  && window._resetAnalytics();
   window._resetTurnos     && window._resetTurnos();
+  window._resetInventario && window._resetInventario();
   showAuthOverlay();
 };
 
@@ -1926,12 +2168,8 @@ function onAuthSuccess(token, businessId, nombre) {
 
   document.getElementById('auth-overlay').classList.add('hidden');
 
-  // Actualizar sidebar title y header móvil con el nombre real del negocio
-  var displayName = nombre || newBid;
-  var titleEl = document.getElementById('sidebar-title');
-  if (titleEl) titleEl.textContent = displayName;
-  var mobileName = document.getElementById('mobile-biz-name');
-  if (mobileName) mobileName.textContent = displayName;
+  // Actualizar sidebar con el nombre del negocio (fuente: respuesta del servidor)
+  setSidebarName(nombre || newBid);
 
   window._startDashboard && window._startDashboard();
 }
@@ -2091,10 +2329,12 @@ window.showSection = function (name) {
   document.getElementById('section-turnos').classList.toggle('hidden',     name !== 'turnos');
   document.getElementById('section-analytics').classList.toggle('hidden',  name !== 'analytics');
   document.getElementById('section-config').classList.toggle('hidden',     name !== 'config');
+  document.getElementById('section-inventario').classList.toggle('hidden', name !== 'inventario');
   document.getElementById('nav-pedidos').classList.toggle('active',    name === 'pedidos');
   document.getElementById('nav-turnos').classList.toggle('active',     name === 'turnos');
   document.getElementById('nav-analytics').classList.toggle('active',  name === 'analytics');
   document.getElementById('nav-config').classList.toggle('active',     name === 'config');
+  document.getElementById('nav-inventario').classList.toggle('active', name === 'inventario');
 
   closeSidebar(); // siempre cerrar sidebar al navegar en móvil
 
@@ -2107,6 +2347,9 @@ window.showSection = function (name) {
   }
   if (name === 'turnos') {
     window._turnosLoad && window._turnosLoad();
+  }
+  if (name === 'inventario') {
+    window._inventarioLoad && window._inventarioLoad();
   }
 };
 
@@ -2138,6 +2381,7 @@ document.getElementById('sidebar-bid').textContent = BID;
         if (!d.valid || (d.role === 'business' && d.businessId !== BID)) {
           showAuthOverlay();
         } else {
+          setSidebarName(d.nombre || d.businessId || BID);
           document.getElementById('auth-overlay').classList.add('hidden');
           window._startDashboard && window._startDashboard();
         }
@@ -2822,12 +3066,8 @@ document.getElementById('sidebar-bid').textContent = BID;
         if (taEl) taEl.checked = !!cfg.turnos_activos;
         var tsEl = document.getElementById('f-turno-servicio');
         if (tsEl) tsEl.value = cfg.turno_servicio || 'Consulta';
-        // Update sidebar title + mobile header with business name
-        if (cfg.nombre) {
-          document.getElementById('sidebar-title').textContent = cfg.nombre;
-          var mbn = document.getElementById('mobile-biz-name');
-          if (mbn) mbn.textContent = cfg.nombre;
-        }
+        // Update sidebar with business name from DB
+        if (cfg.nombre) setSidebarName(cfg.nombre);
         renderMenu();
         updatePreview();
         updateColorPresets(color);
@@ -2868,11 +3108,7 @@ document.getElementById('sidebar-bid').textContent = BID;
         st.textContent = 'Guardado ✓';
         st.className   = 'save-status ok';
         showToast('Configuración guardada correctamente', 'ok');
-        if (body.nombre) {
-          document.getElementById('sidebar-title').textContent = body.nombre;
-          var mbn2 = document.getElementById('mobile-biz-name');
-          if (mbn2) mbn2.textContent = body.nombre;
-        }
+        if (body.nombre) setSidebarName(body.nombre);
         setTimeout(function () { st.textContent = ''; st.className = 'save-status'; }, 4000);
       })
       .catch(function (e) {
@@ -4065,6 +4301,413 @@ document.getElementById('sidebar-bid').textContent = BID;
       var el = document.getElementById('disp-save-status');
       if (el) { el.textContent = '✓ Guardado'; setTimeout(function(){ el.textContent=''; }, 2500); }
     }).catch(function() { alert('No se pudo guardar la disponibilidad'); });
+  };
+
+})();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- INVENTARIO LOGIC                                                         -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  var IV = {
+    productos:    [],
+    movimientos:  [],
+    activeTab:    'productos',
+    editingId:    null,        // null = nuevo, number = editar
+    movProductoId: null,
+    chartVentas:  null,
+    chartValor:   null
+  };
+
+  // ── Tabs ─────────────────────────────────────────────────────────────────
+
+  window.INV_setTab = function (tab) {
+    IV.activeTab = tab;
+    ['productos','movimientos','analytics'].forEach(function (t) {
+      var btn   = document.getElementById('inv-tab-' + t + '-btn');
+      var panel = document.getElementById('inv-panel-' + t);
+      if (btn)   btn.classList.toggle('active', t === tab);
+      if (panel) panel.classList.toggle('active', t === tab);
+    });
+    if (tab === 'movimientos') INV_loadMovimientos();
+    if (tab === 'analytics')   INV_renderAnalytics();
+  };
+
+  // ── Productos ─────────────────────────────────────────────────────────────
+
+  window.INV_loadProductos = function () {
+    apiFetch('/productos')
+      .then(function (rows) {
+        IV.productos = rows || [];
+        INV_filterProducts();
+        INV_renderAnalytics();
+        // Populate movimientos product filter
+        var prodSel = document.getElementById('inv-mov-prod-filter');
+        if (prodSel) {
+          var cur = prodSel.value;
+          prodSel.innerHTML = '<option value="">Todos los productos</option>';
+          (rows || []).forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value = p.id; opt.textContent = p.nombre;
+            if (String(p.id) === cur) opt.selected = true;
+            prodSel.appendChild(opt);
+          });
+        }
+      })
+      .catch(function () {});
+  };
+
+  window.INV_filterProducts = function () {
+    var search = (document.getElementById('inv-search') || {}).value || '';
+    var cat    = (document.getElementById('inv-cat-filter') || {}).value || '';
+    search = search.toLowerCase();
+
+    var filtered = IV.productos.filter(function (p) {
+      var matchSearch = !search ||
+        p.nombre.toLowerCase().includes(search) ||
+        (p.descripcion || '').toLowerCase().includes(search);
+      var matchCat = !cat || p.categoria === cat;
+      return matchSearch && matchCat;
+    });
+
+    // Populate category filter options
+    var catSelect = document.getElementById('inv-cat-filter');
+    if (catSelect && catSelect.options.length <= 1) {
+      var cats = [...new Set(IV.productos.map(function (p) { return p.categoria || 'General'; }))].sort();
+      cats.forEach(function (c) {
+        var opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        catSelect.appendChild(opt);
+      });
+    }
+
+    renderProductGrid(filtered);
+  };
+
+  function renderProductGrid(list) {
+    var grid = document.getElementById('inv-product-grid');
+    if (!grid) return;
+    if (!list.length) {
+      grid.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:32px 0">Sin productos</p>';
+      return;
+    }
+    grid.innerHTML = list.map(function (p) {
+      var stockClass = p.stock_actual <= 0 ? 'empty' : (p.stock_actual <= p.stock_minimo ? 'warn' : 'ok');
+      var stockLabel = p.stock_actual <= 0 ? 'Sin stock' : ('Stock: ' + p.stock_actual);
+      var margen = p.precio_costo > 0
+        ? Math.round((p.precio_venta - p.precio_costo) / p.precio_costo * 100) + '%'
+        : '—';
+      return '<div class="inv-card">' +
+        '<div class="inv-card-header">' +
+          '<span class="inv-stock-badge ' + stockClass + '">' + stockLabel + '</span>' +
+          '<span class="inv-card-cat">' + (p.categoria || 'General') + '</span>' +
+        '</div>' +
+        '<div class="inv-card-name">' + escHtml(p.nombre) + '</div>' +
+        '<div class="inv-card-desc">' + escHtml(p.descripcion || '') + '</div>' +
+        '<div class="inv-card-prices">' +
+          '<span>Venta: <strong>$' + Number(p.precio_venta).toFixed(2) + '</strong></span>' +
+          '<span>Costo: $' + Number(p.precio_costo).toFixed(2) + '</span>' +
+          '<span>Margen: ' + margen + '</span>' +
+        '</div>' +
+        '<div class="inv-card-actions">' +
+          '<button class="btn-sm" onclick="INV_openMovModal(' + p.id + ',\'' + escHtml(p.nombre) + '\')">+ Movimiento</button>' +
+          '<button class="btn-sm btn-secondary" onclick="INV_openEditModal(' + p.id + ')">Editar</button>' +
+          '<button class="btn-sm btn-danger" onclick="INV_deleteProduct(' + p.id + ')">Eliminar</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Modal Producto ────────────────────────────────────────────────────────
+
+  window.INV_openNewModal = function () {
+    IV.editingId = null;
+    var titleEl = document.getElementById('inv-modal-title');
+    if (titleEl) titleEl.textContent = 'Nuevo producto';
+    var stockFields = document.getElementById('inv-stock-fields');
+    if (stockFields) stockFields.style.display = '';
+    var delBtn = document.getElementById('inv-delete-btn');
+    if (delBtn) delBtn.style.display = 'none';
+    ['inv-f-nombre','inv-f-descripcion','inv-f-precio-venta',
+     'inv-f-precio-costo','inv-f-stock','inv-f-stock-min'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    var catEl = document.getElementById('inv-f-categoria');
+    if (catEl) catEl.value = 'General';
+    var modal = document.getElementById('inv-prod-modal');
+    if (modal) modal.classList.remove('hidden');
+  };
+
+  window.INV_openEditModal = function (id) {
+    var p = IV.productos.find(function (x) { return x.id === id; });
+    if (!p) return;
+    IV.editingId = id;
+    var titleEl = document.getElementById('inv-modal-title');
+    if (titleEl) titleEl.textContent = 'Editar producto';
+    var stockFields = document.getElementById('inv-stock-fields');
+    if (stockFields) stockFields.style.display = 'none'; // hide stock on edit (use movimiento instead)
+    var delBtn = document.getElementById('inv-delete-btn');
+    if (delBtn) delBtn.style.display = '';
+    var fields = {
+      'inv-f-nombre':       p.nombre,
+      'inv-f-descripcion':  p.descripcion || '',
+      'inv-f-categoria':    p.categoria || 'General',
+      'inv-f-precio-venta': p.precio_venta,
+      'inv-f-precio-costo': p.precio_costo,
+      'inv-f-stock':        p.stock_actual,
+      'inv-f-stock-min':    p.stock_minimo
+    };
+    Object.keys(fields).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = fields[id];
+    });
+    var modal = document.getElementById('inv-prod-modal');
+    if (modal) modal.classList.remove('hidden');
+  };
+
+  window.INV_closeModal = function () {
+    var modal = document.getElementById('inv-prod-modal');
+    if (modal) modal.classList.add('hidden');
+    IV.editingId = null;
+  };
+
+  window.INV_saveProduct = function () {
+    var nombre = (document.getElementById('inv-f-nombre') || {}).value || '';
+    if (!nombre.trim()) { alert('El nombre es obligatorio'); return; }
+    var payload = {
+      nombre:       nombre.trim(),
+      descripcion:  (document.getElementById('inv-f-descripcion')  || {}).value || '',
+      categoria:    (document.getElementById('inv-f-categoria')    || {}).value || 'General',
+      precio_venta: parseFloat((document.getElementById('inv-f-precio-venta') || {}).value) || 0,
+      precio_costo: parseFloat((document.getElementById('inv-f-precio-costo') || {}).value) || 0,
+      stock_actual: parseInt((document.getElementById('inv-f-stock')           || {}).value, 10) || 0,
+      stock_minimo: parseInt((document.getElementById('inv-f-stock-min')       || {}).value, 10) || 0
+    };
+    var isEdit = IV.editingId !== null;
+    var url    = isEdit ? '/productos/' + IV.editingId : '/productos';
+    apiFetch(url, {
+      method:  isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    }).then(function () {
+      INV_closeModal();
+      INV_loadProductos();
+    }).catch(function () { alert('No se pudo guardar el producto'); });
+  };
+
+  window.INV_deleteProduct = function (id) {
+    var pid = id !== undefined ? id : IV.editingId;
+    var p = IV.productos.find(function (x) { return x.id === pid; });
+    if (!p) return;
+    if (!confirm('¿Eliminar ' + p.nombre + '?')) return;
+    apiFetch('/productos/' + pid, { method: 'DELETE' })
+      .then(function () { INV_closeModal(); INV_loadProductos(); })
+      .catch(function () { alert('No se pudo eliminar'); });
+  };
+
+  // ── Modal Movimiento ──────────────────────────────────────────────────────
+
+  window.INV_openMovModal = function (productoId, nombre) {
+    IV.movProductoId = productoId;
+    var nombreEl = document.getElementById('inv-mov-prod-nombre');
+    if (nombreEl) nombreEl.textContent = nombre;
+    var hiddenEl = document.getElementById('inv-mov-prod-id');
+    if (hiddenEl) hiddenEl.value = productoId;
+    var tipoEl   = document.getElementById('inv-mov-tipo');
+    var cantEl   = document.getElementById('inv-mov-cantidad');
+    var motivoEl = document.getElementById('inv-mov-motivo');
+    if (tipoEl)   tipoEl.value = 'entrada';
+    if (cantEl)   cantEl.value = '';
+    if (motivoEl) motivoEl.value = '';
+    var modal = document.getElementById('inv-mov-modal');
+    if (modal) modal.classList.remove('hidden');
+  };
+
+  window.INV_closeMovModal = function () {
+    var modal = document.getElementById('inv-mov-modal');
+    if (modal) modal.classList.add('hidden');
+    IV.movProductoId = null;
+  };
+
+  window.INV_saveMovimiento = function () {
+    if (!IV.movProductoId) return;
+    var tipo     = (document.getElementById('inv-mov-tipo')     || {}).value || 'entrada';
+    var cantidad = parseInt((document.getElementById('inv-mov-cantidad') || {}).value, 10);
+    var motivo   = (document.getElementById('inv-mov-motivo')   || {}).value || '';
+    if (!cantidad || cantidad <= 0) { alert('Cantidad debe ser mayor a 0'); return; }
+    apiFetch('/productos/' + IV.movProductoId + '/movimiento', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ tipo: tipo, cantidad: cantidad, motivo: motivo })
+    }).then(function () {
+      INV_closeMovModal();
+      INV_loadProductos();
+      if (IV.activeTab === 'movimientos') INV_loadMovimientos();
+    }).catch(function () { alert('No se pudo registrar el movimiento'); });
+  };
+
+  // ── Movimientos ───────────────────────────────────────────────────────────
+
+  window.INV_loadMovimientos = function () {
+    var prodFilter = (document.getElementById('inv-mov-prod-filter') || {}).value || '';
+    var tipoFilter = (document.getElementById('inv-mov-tipo-filter') || {}).value || '';
+    var qs = [];
+    if (prodFilter) qs.push('producto_id=' + prodFilter);
+    if (tipoFilter) qs.push('tipo=' + tipoFilter);
+    var url = '/productos/movimientos' + (qs.length ? '?' + qs.join('&') : '');
+    apiFetch(url)
+      .then(function (rows) {
+        IV.movimientos = rows || [];
+        renderMovTable(rows || []);
+      })
+      .catch(function () {});
+  };
+
+  function renderMovTable(rows) {
+    var tbody = document.getElementById('inv-mov-tbody');
+    if (!tbody) return;
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Sin movimientos</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function (m) {
+      var d = new Date(m.creado_en);
+      var fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      var hora  = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      var signo = m.tipo === 'entrada' ? '+' : (m.tipo === 'salida' ? '-' : '=');
+      return '<tr>' +
+        '<td>' + fecha + ' ' + hora + '</td>' +
+        '<td>' + escHtml(m.nombre || '—') + '</td>' +
+        '<td><span class="inv-tipo-badge ' + m.tipo + '">' + m.tipo + '</span></td>' +
+        '<td style="font-weight:600">' + signo + m.cantidad + '</td>' +
+        '<td>' + escHtml(m.motivo || '—') + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  window.INV_applyMovFilters = function () {
+    INV_loadMovimientos();
+  };
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+
+  function INV_renderAnalytics() {
+    if (IV.activeTab !== 'analytics') return;
+    var prods = IV.productos;
+    if (!prods.length) return;
+
+    var valorStock   = prods.reduce(function (s, p) { return s + p.stock_actual * Number(p.precio_costo); }, 0);
+    var ganancia     = prods.reduce(function (s, p) { return s + p.stock_actual * (Number(p.precio_venta) - Number(p.precio_costo)); }, 0);
+    var agotados     = prods.filter(function (p) { return p.stock_actual <= 0; }).length;
+    var bajoMinimo   = prods.filter(function (p) { return p.stock_actual > 0 && p.stock_actual <= p.stock_minimo; }).length;
+
+    setText('inv-kpi-valor',    '$' + valorStock.toFixed(2));
+    setText('inv-kpi-ganancia', '$' + ganancia.toFixed(2));
+    setText('inv-kpi-agotados', agotados);
+    setText('inv-kpi-bajo',     bajoMinimo);
+
+    // Top 8 by stock value
+    var sorted = prods.slice().sort(function (a, b) {
+      return (b.stock_actual * Number(b.precio_costo)) - (a.stock_actual * Number(a.precio_costo));
+    }).slice(0, 8);
+
+    renderBarChart(sorted);
+    renderLinearTable(prods);
+  }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function renderBarChart(prods) {
+    var canvas = document.getElementById('inv-chart-ventas');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width = canvas.offsetWidth || 400;
+    var H = canvas.height = 200;
+    ctx.clearRect(0, 0, W, H);
+
+    if (!prods.length) return;
+    var values = prods.map(function (p) { return p.stock_actual * Number(p.precio_costo); });
+    var maxVal = Math.max.apply(null, values) || 1;
+    var barW   = Math.floor((W - 40) / prods.length) - 4;
+    var colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6'];
+
+    prods.forEach(function (p, i) {
+      var barH = Math.floor((values[i] / maxVal) * (H - 40));
+      var x    = 20 + i * (barW + 4);
+      var y    = H - 30 - barH;
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillRect(x, y, barW, barH);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      var label = p.nombre.length > 8 ? p.nombre.slice(0, 7) + '…' : p.nombre;
+      ctx.fillText(label, x + barW / 2, H - 14);
+    });
+  }
+
+  function renderLinearTable(prods) {
+    var tbody = document.getElementById('inv-detail-tbody');
+    if (!tbody) return;
+    var sorted = prods.slice().sort(function (a, b) {
+      var ma = Number(a.precio_costo) > 0 ? (Number(a.precio_venta) - Number(a.precio_costo)) / Number(a.precio_costo) : 0;
+      var mb = Number(b.precio_costo) > 0 ? (Number(b.precio_venta) - Number(b.precio_costo)) / Number(b.precio_costo) : 0;
+      return mb - ma;
+    });
+    tbody.innerHTML = sorted.map(function (p) {
+      var margen = Number(p.precio_costo) > 0
+        ? Math.round((Number(p.precio_venta) - Number(p.precio_costo)) / Number(p.precio_costo) * 100)
+        : 0;
+      var stockClass = p.stock_actual <= 0 ? 'color:var(--red)' : (p.stock_actual <= p.stock_minimo ? 'color:var(--yellow)' : '');
+      return '<tr>' +
+        '<td>' + escHtml(p.nombre) + '</td>' +
+        '<td>' + escHtml(p.categoria || 'General') + '</td>' +
+        '<td style="' + stockClass + '">' + p.stock_actual + '</td>' +
+        '<td>$' + Number(p.precio_venta).toFixed(2) + '</td>' +
+        '<td>$' + Number(p.precio_costo).toFixed(2) + '</td>' +
+        '<td>$' + (p.stock_actual * Number(p.precio_costo)).toFixed(2) + '</td>' +
+        '<td>' + margen + '%</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  // ── Load / Reset ──────────────────────────────────────────────────────────
+
+  window._inventarioLoad = function () {
+    INV_loadProductos();
+    if (IV.activeTab === 'movimientos') INV_loadMovimientos();
+  };
+
+  window._resetInventario = function () {
+    IV.productos     = [];
+    IV.movimientos   = [];
+    IV.editingId     = null;
+    IV.movProductoId = null;
+    var grid = document.getElementById('inv-product-grid');
+    if (grid) grid.innerHTML = '';
+    var tbody = document.getElementById('inv-mov-tbody');
+    if (tbody) tbody.innerHTML = '';
+    var dtbody = document.getElementById('inv-detail-tbody');
+    if (dtbody) dtbody.innerHTML = '';
+    // Reset to first tab
+    ['productos','movimientos','analytics'].forEach(function (t) {
+      var btn   = document.getElementById('inv-tab-' + t + '-btn');
+      var panel = document.getElementById('inv-panel-' + t);
+      if (btn)   btn.classList.toggle('active', t === 'productos');
+      if (panel) panel.classList.toggle('active', t === 'productos');
+    });
+    IV.activeTab = 'productos';
   };
 
 })();
