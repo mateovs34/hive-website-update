@@ -1192,6 +1192,8 @@ function handleVerify(req, res) {
 
 // POST /auth/forgot-password
 async function handleForgotPassword(res, raw) {
+  console.log('[Resend] client inicializado:', !!resendClient);
+  console.log('[Resend] API key presente:', !!process.env.RESEND_API_KEY);
   var body; try { body = JSON.parse(raw); } catch (_) {
     return sendJSON(res, 400, { error: 'invalid_json' });
   }
@@ -1225,22 +1227,28 @@ async function handleForgotPassword(res, raw) {
     }
 
     var resetLink = APP_URL + '/app?reset=' + token;
-    await resendClient.emails.send({
-      from:    'noreply@chatwidget.app',
-      to:      row.email,
-      subject: 'Resetear contraseña de tu ChatWidget',
-      html: [
-        '<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0d1117;color:#e2e8f0;border-radius:12px">',
-        '  <h2 style="color:#6366f1;margin-top:0">💬 ChatWidget</h2>',
-        '  <p>Hola <strong>' + (row.nombre || bid) + '</strong>,</p>',
-        '  <p>Recibimos una solicitud para resetear la contraseña de tu cuenta <code>' + bid + '</code>.</p>',
-        '  <p>Hacé click en el botón para crear una nueva contraseña. El link expira en <strong>1 hora</strong>.</p>',
-        '  <a href="' + resetLink + '" style="display:inline-block;margin:20px 0;padding:12px 24px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Resetear contraseña</a>',
-        '  <p style="color:#64748b;font-size:13px">Si no solicitaste este reset, ignorá este email. Tu contraseña no cambiará.</p>',
-        '  <p style="color:#64748b;font-size:12px">O copiá este link:<br><code style="word-break:break-all">' + resetLink + '</code></p>',
-        '</div>'
-      ].join('\n')
-    });
+    try {
+      var resendResult = await resendClient.emails.send({
+        from:    'noreply@chatwidget.app',
+        to:      row.email,
+        subject: 'Resetear contraseña de tu ChatWidget',
+        html: [
+          '<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0d1117;color:#e2e8f0;border-radius:12px">',
+          '  <h2 style="color:#6366f1;margin-top:0">💬 ChatWidget</h2>',
+          '  <p>Hola <strong>' + (row.nombre || bid) + '</strong>,</p>',
+          '  <p>Recibimos una solicitud para resetear la contraseña de tu cuenta <code>' + bid + '</code>.</p>',
+          '  <p>Hacé click en el botón para crear una nueva contraseña. El link expira en <strong>1 hora</strong>.</p>',
+          '  <a href="' + resetLink + '" style="display:inline-block;margin:20px 0;padding:12px 24px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Resetear contraseña</a>',
+          '  <p style="color:#64748b;font-size:13px">Si no solicitaste este reset, ignorá este email. Tu contraseña no cambiará.</p>',
+          '  <p style="color:#64748b;font-size:12px">O copiá este link:<br><code style="word-break:break-all">' + resetLink + '</code></p>',
+          '</div>'
+        ].join('\n')
+      });
+      console.log('[Resend] resultado completo:', JSON.stringify(resendResult));
+    } catch (resendError) {
+      console.log('[Resend] error:', JSON.stringify(resendError));
+      return sendJSON(res, 500, { error: 'Error al enviar el email: ' + (resendError.message || JSON.stringify(resendError)) });
+    }
 
     console.log('[Reset] email enviado a', row.email);
     sendJSON(res, 200, { ok: true, message: 'Te enviamos un email con instrucciones para resetear tu contraseña.' });
