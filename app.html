@@ -1724,11 +1724,11 @@ docker compose up --build -d</div>
     <div class="auth-form" id="auth-login-form">
       <div class="auth-field-group">
         <label>Business ID</label>
-        <input class="auth-input" id="auth-bid-login" type="text" placeholder="mi-negocio" autocomplete="username">
+        <input class="auth-input" id="auth-bid-login" type="text" placeholder="mi-negocio" autocomplete="off">
       </div>
       <div class="auth-field-group">
         <label>Contraseña</label>
-        <input class="auth-input" id="auth-pass-login" type="password" placeholder="••••••••" autocomplete="current-password"
+        <input class="auth-input" id="auth-pass-login" type="password" placeholder="••••••••" autocomplete="new-password"
                onkeydown="if(event.key==='Enter') doLogin()">
       </div>
       <div class="auth-error" id="auth-login-error"></div>
@@ -1740,7 +1740,7 @@ docker compose up --build -d</div>
     <div class="auth-form" id="auth-register-form" style="display:none">
       <div class="auth-field-group">
         <label>Business ID</label>
-        <input class="auth-input" id="auth-bid-reg" type="text" placeholder="mi-negocio" autocomplete="username">
+        <input class="auth-input" id="auth-bid-reg" type="text" placeholder="mi-negocio" autocomplete="off">
         <div class="auth-hint">Solo letras, números y guiones. No se puede cambiar después.</div>
       </div>
       <div class="auth-field-group">
@@ -1758,7 +1758,7 @@ docker compose up --build -d</div>
       </div>
       <div class="auth-field-group">
         <label>Confirmar contraseña</label>
-        <input class="auth-input" id="auth-pass-confirm" type="password" placeholder="••••••••"
+        <input class="auth-input" id="auth-pass-confirm" type="password" placeholder="••••••••" autocomplete="new-password"
                onkeydown="if(event.key==='Enter') doRegister()">
       </div>
       <div class="auth-error" id="auth-register-error"></div>
@@ -1862,7 +1862,23 @@ function apiFetch(url, opts) {
   });
 }
 
+function clearAuthFields() {
+  ['auth-bid-login','auth-pass-login',
+   'auth-bid-reg','auth-nombre-reg','auth-email-reg','auth-pass-reg','auth-pass-confirm',
+   'auth-bid-forgot','auth-reset-token','auth-reset-pass','auth-reset-confirm'
+  ].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['auth-login-error','auth-register-error','auth-forgot-error','auth-reset-error'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = '';
+  });
+}
+
 function showAuthOverlay() {
+  clearAuthFields();
+  switchAuthTab('login');
   var el = document.getElementById('auth-overlay');
   if (el) el.classList.remove('hidden');
 }
