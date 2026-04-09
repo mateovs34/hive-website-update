@@ -1124,7 +1124,7 @@ async function handleGetMovimientos(businessId, res, query) {
       where += ' AND m.tipo = $' + params.length;
     }
     var result = await pool.query(`
-      SELECT m.id, m.producto_id, p.nombre AS producto_nombre, m.tipo, m.cantidad, m.motivo, m.session_id, m.creado_en
+      SELECT m.id, m.producto_id, p.nombre, m.tipo, m.cantidad, m.motivo, m.session_id, m.creado_en
       FROM movimientos_stock m
       JOIN productos p ON p.id = m.producto_id
       ${where}
