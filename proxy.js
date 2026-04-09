@@ -439,7 +439,8 @@ async function getTurnosContextForPrompt(businessId) {
     var bookedSet = new Set(bookedRes.rows.map(function (r) { return r.hora; }));
     var available = all.filter(function (s) { return !bookedSet.has(s); });
     if (available.length > 0) {
-      lines.push(fechaStr + ': ' + available.join(', '));
+      var fechaLabel = fecha.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+      lines.push(fechaLabel + ' (' + fechaStr + '): ' + available.join(', '));
     }
   }
   return lines.length
@@ -448,6 +449,8 @@ async function getTurnosContextForPrompt(businessId) {
 }
 
 async function saveTurnoIfDetected(businessId, sessionId, parsed) {
+  console.log('[Turno] parsed.turno:', JSON.stringify(parsed && parsed.turno));
+  console.log('[Turno] businessId:', businessId, 'sessionId:', sessionId);
   if (!parsed || !parsed.turno) return;
   var t = parsed.turno;
   if (!t.fecha || !t.hora) return;
@@ -997,6 +1000,7 @@ async function handlePostTurno(businessId, res, raw) {
       String(body.servicio         || 'Consulta').slice(0, 100),
       body.session_id || null
     ]);
+    console.log('[POST /turnos] Turno creado — negocio:', businessId, 'fecha:', body.fecha, 'hora:', body.hora, 'id:', result.rows[0].id);
     sendJSON(res, 201, { ok: true, id: result.rows[0].id });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
