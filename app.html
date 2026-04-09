@@ -2112,6 +2112,10 @@ function clearAuthFields() {
 }
 
 function showAuthOverlay() {
+  // Limpiar nombre del negocio para que no quede el valor de la sesión anterior
+  setSidebarName('');
+  var bidEl = document.getElementById('sidebar-bid');
+  if (bidEl) bidEl.textContent = '—';
   clearAuthFields();
   switchAuthTab('login');
   var el = document.getElementById('auth-overlay');
@@ -2119,6 +2123,7 @@ function showAuthOverlay() {
 }
 
 function setSidebarName(name) {
+  console.log('[Sidebar] setName:', name);
   var titleEl = document.getElementById('sidebar-title');
   if (titleEl) titleEl.textContent = name || 'ChatWidget';
   var mbn = document.getElementById('mobile-biz-name');
