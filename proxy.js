@@ -1229,7 +1229,7 @@ async function handleForgotPassword(res, raw) {
     var resetLink = APP_URL + '/app?reset=' + token;
     try {
       var resendResult = await resendClient.emails.send({
-        from:    'noreply@chatwidget.app',
+        from:    'onboarding@resend.dev',
         to:      row.email,
         subject: 'Resetear contraseña de tu ChatWidget',
         html: [
