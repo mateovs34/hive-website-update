@@ -208,6 +208,9 @@ async function initSchema() {
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS email TEXT`);
 
+  // Módulos activos por negocio
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS modulos_activos TEXT NOT NULL DEFAULT '["pedidos"]'`);
+
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
     INSERT INTO negocios (business_id, nombre)
@@ -862,29 +865,32 @@ async function handlePutConfig(businessId, res, raw) {
     return sendJSON(res, 400, { error: 'invalid_json' });
   }
   try {
+    var modulosArr = Array.isArray(body.modulos_activos) ? body.modulos_activos : null;
+    var modulosJson = modulosArr ? JSON.stringify(modulosArr) : null;
     await pool.query(`
       INSERT INTO negocios
         (business_id, nombre, descripcion, menu, horarios, direccion, telefono,
          email_contacto, whatsapp, welcome_msg, bot_nombre, bot_avatar,
-         color_widget, turnos_activos, turno_servicio, actualizado_en)
+         color_widget, turnos_activos, turno_servicio, modulos_activos, actualizado_en)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'), NOW())
       ON CONFLICT (business_id) DO UPDATE SET
-        nombre         = EXCLUDED.nombre,
-        descripcion    = EXCLUDED.descripcion,
-        menu           = EXCLUDED.menu,
-        horarios       = EXCLUDED.horarios,
-        direccion      = EXCLUDED.direccion,
-        telefono       = EXCLUDED.telefono,
-        email_contacto = EXCLUDED.email_contacto,
-        whatsapp       = EXCLUDED.whatsapp,
-        welcome_msg    = EXCLUDED.welcome_msg,
-        bot_nombre     = EXCLUDED.bot_nombre,
-        bot_avatar     = EXCLUDED.bot_avatar,
-        color_widget   = EXCLUDED.color_widget,
-        turnos_activos = EXCLUDED.turnos_activos,
-        turno_servicio = EXCLUDED.turno_servicio,
-        actualizado_en = NOW()
+        nombre          = EXCLUDED.nombre,
+        descripcion     = EXCLUDED.descripcion,
+        menu            = EXCLUDED.menu,
+        horarios        = EXCLUDED.horarios,
+        direccion       = EXCLUDED.direccion,
+        telefono        = EXCLUDED.telefono,
+        email_contacto  = EXCLUDED.email_contacto,
+        whatsapp        = EXCLUDED.whatsapp,
+        welcome_msg     = EXCLUDED.welcome_msg,
+        bot_nombre      = EXCLUDED.bot_nombre,
+        bot_avatar      = EXCLUDED.bot_avatar,
+        color_widget    = EXCLUDED.color_widget,
+        turnos_activos  = EXCLUDED.turnos_activos,
+        turno_servicio  = EXCLUDED.turno_servicio,
+        modulos_activos = CASE WHEN $16 IS NOT NULL THEN EXCLUDED.modulos_activos ELSE negocios.modulos_activos END,
+        actualizado_en  = NOW()
     `, [
       businessId,
       String(body.nombre         || 'Mi Negocio').slice(0, 100),
@@ -900,7 +906,8 @@ async function handlePutConfig(businessId, res, raw) {
       String(body.bot_avatar     || '🤖').slice(0, 10),
       /^#[0-9a-fA-F]{6}$/.test(body.color_widget) ? body.color_widget : '#6366f1',
       body.turnos_activos ? 1 : 0,
-      String(body.turno_servicio || 'Consulta').slice(0, 100)
+      String(body.turno_servicio || 'Consulta').slice(0, 100),
+      modulosJson
     ]);
     sendJSON(res, 200, { ok: true });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }

@@ -953,6 +953,41 @@
       .stats-bar   { grid-template-columns: 1fr 1fr; }
     }
 
+    /* ── Welcome overlay (selección de módulos post-registro) ───────────────── */
+    .welcome-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; }
+    .welcome-overlay.hidden { display: none; }
+    .welcome-box { max-width: 640px; width: 100%; }
+    .welcome-logo { font-size: 36px; text-align: center; margin-bottom: 12px; }
+    .welcome-title { font-size: 26px; font-weight: 800; text-align: center; margin-bottom: 6px; }
+    .welcome-sub { font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 28px; }
+    .mod-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+    .mod-card { background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 20px 18px; cursor: pointer; transition: border-color .15s, background .15s; user-select: none; }
+    .mod-card:hover { border-color: var(--accent); }
+    .mod-card.selected { border-color: var(--accent); background: var(--surface2); }
+    .mod-card-icon { font-size: 28px; margin-bottom: 8px; }
+    .mod-card-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .mod-card.selected .mod-card-title { color: var(--accent); }
+    .mod-card-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .mod-check { float: right; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); background: transparent; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: background .15s, border-color .15s; }
+    .mod-card.selected .mod-check { background: var(--accent); border-color: var(--accent); color: white; }
+    .welcome-btn { width: 100%; padding: 14px; font-size: 15px; font-weight: 700; }
+    /* Module cards in config */
+    .cfg-mod-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .cfg-mod-card { background: var(--surface2); border: 2px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: border-color .15s; display: flex; align-items: center; gap: 10px; user-select: none; }
+    .cfg-mod-card:hover { border-color: var(--accent); }
+    .cfg-mod-card.selected { border-color: var(--accent); }
+    .cfg-mod-card-icon { font-size: 20px; flex-shrink: 0; }
+    .cfg-mod-card-body { flex: 1; min-width: 0; }
+    .cfg-mod-card-title { font-size: 13px; font-weight: 700; }
+    .cfg-mod-card.selected .cfg-mod-card-title { color: var(--accent); }
+    .cfg-mod-card-desc { font-size: 11px; color: var(--muted); }
+    .cfg-mod-toggle { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+    .cfg-mod-card.selected .cfg-mod-toggle { background: var(--accent); border-color: var(--accent); color: white; }
+    @media (max-width: 500px) {
+      .mod-grid { grid-template-columns: 1fr; }
+      .cfg-mod-grid { grid-template-columns: 1fr; }
+    }
+
     /* ── Inventario ─────────────────────────────────────────────────────────── */
     #section-inventario { flex-direction: column; overflow: hidden; }
     .inv-tabs-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
@@ -1237,6 +1272,15 @@
     <!-- ─── SECCIÓN PEDIDOS ──────────────────────────────────────────────── -->
     <div class="app-section" id="section-pedidos">
 
+      <!-- Empty state si el módulo pedidos no está activo -->
+      <div id="pedidos-module-off" class="hidden" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:40px;text-align:center">
+        <div style="font-size:48px">🛒</div>
+        <div style="font-size:18px;font-weight:700">El módulo Pedidos no está activo</div>
+        <div style="font-size:14px;color:var(--muted)">Activalo desde Configuración → General → Módulos</div>
+        <button class="btn btn-primary" onclick="showSection('config')">Ir a Configuración</button>
+      </div>
+
+      <div id="pedidos-module-on">
       <div class="section-topbar">
         <span class="section-topbar-title">Pedidos en tiempo real</span>
       </div>
@@ -1335,6 +1379,7 @@
         </div>
 
       </div>
+      </div><!-- /pedidos-module-on -->
     </div><!-- /section-pedidos -->
 
     <!-- ─── SECCIÓN CONFIGURACIÓN ────────────────────────────────────────── -->
@@ -1361,6 +1406,45 @@
 
           <!-- ── TAB GENERAL ── -->
           <div class="tab-panel active" id="tab-general">
+
+            <div class="form-section">
+              <div class="form-section-title">Módulos activos</div>
+              <div class="field-hint" style="margin-bottom:10px">Activá o desactivá los módulos según lo que necesite tu negocio. Los cambios se guardan con "Guardar cambios".</div>
+              <div class="cfg-mod-grid" id="cfg-mod-grid">
+                <div class="cfg-mod-card" id="cmod-pedidos" onclick="CFG_toggleMod('pedidos')">
+                  <div class="cfg-mod-card-icon">🛒</div>
+                  <div class="cfg-mod-card-body">
+                    <div class="cfg-mod-card-title">Pedidos</div>
+                    <div class="cfg-mod-card-desc">Pedidos por chat y WhatsApp</div>
+                  </div>
+                  <div class="cfg-mod-toggle" id="cmod-toggle-pedidos"></div>
+                </div>
+                <div class="cfg-mod-card" id="cmod-turnos" onclick="CFG_toggleMod('turnos')">
+                  <div class="cfg-mod-card-icon">📅</div>
+                  <div class="cfg-mod-card-body">
+                    <div class="cfg-mod-card-title">Turnos</div>
+                    <div class="cfg-mod-card-desc">Agenda y reservas de clientes</div>
+                  </div>
+                  <div class="cfg-mod-toggle" id="cmod-toggle-turnos"></div>
+                </div>
+                <div class="cfg-mod-card" id="cmod-inventario" onclick="CFG_toggleMod('inventario')">
+                  <div class="cfg-mod-card-icon">📦</div>
+                  <div class="cfg-mod-card-body">
+                    <div class="cfg-mod-card-title">Inventario</div>
+                    <div class="cfg-mod-card-desc">Stock y ventas en tiempo real</div>
+                  </div>
+                  <div class="cfg-mod-toggle" id="cmod-toggle-inventario"></div>
+                </div>
+                <div class="cfg-mod-card" id="cmod-consultas" onclick="CFG_toggleMod('consultas')">
+                  <div class="cfg-mod-card-icon">💬</div>
+                  <div class="cfg-mod-card-body">
+                    <div class="cfg-mod-card-title">Solo consultas</div>
+                    <div class="cfg-mod-card-desc">Bot solo responde preguntas</div>
+                  </div>
+                  <div class="cfg-mod-toggle" id="cmod-toggle-consultas"></div>
+                </div>
+              </div>
+            </div>
 
             <div class="form-section">
               <div class="form-section-title">Identidad del negocio</div>
@@ -1944,6 +2028,51 @@ docker compose up --build -d</div>
 </div>
 
 <!-- ── Auth overlay ──────────────────────────────────────────────────────── -->
+<!-- ════════ WELCOME OVERLAY (módulos post-registro) ════════ -->
+<div id="welcome-overlay" class="welcome-overlay hidden">
+  <div class="welcome-box">
+    <div class="welcome-logo">🎉</div>
+    <div class="welcome-title">¿Qué necesita tu negocio?</div>
+    <div class="welcome-sub">Activá los módulos que querés usar. Podés cambiarlos después en Configuración.</div>
+    <div class="mod-grid" id="welcome-mod-grid">
+      <div class="mod-card" id="wmod-pedidos" onclick="WEL_toggle('pedidos')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="mod-card-icon">🛒</div>
+          <div class="mod-check" id="wmod-check-pedidos">✓</div>
+        </div>
+        <div class="mod-card-title">Pedidos</div>
+        <div class="mod-card-desc">Tomá pedidos automáticamente por chat y WhatsApp</div>
+      </div>
+      <div class="mod-card" id="wmod-turnos" onclick="WEL_toggle('turnos')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="mod-card-icon">📅</div>
+          <div class="mod-check" id="wmod-check-turnos"></div>
+        </div>
+        <div class="mod-card-title">Turnos</div>
+        <div class="mod-card-desc">Gestioná tu agenda y reservas de clientes</div>
+      </div>
+      <div class="mod-card" id="wmod-inventario" onclick="WEL_toggle('inventario')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="mod-card-icon">📦</div>
+          <div class="mod-check" id="wmod-check-inventario"></div>
+        </div>
+        <div class="mod-card-title">Inventario</div>
+        <div class="mod-card-desc">Controlá tu stock y ventas en tiempo real</div>
+      </div>
+      <div class="mod-card" id="wmod-consultas" onclick="WEL_toggle('consultas')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="mod-card-icon">💬</div>
+          <div class="mod-check" id="wmod-check-consultas"></div>
+        </div>
+        <div class="mod-card-title">Solo consultas</div>
+        <div class="mod-card-desc">El bot responde preguntas sin tomar pedidos ni turnos</div>
+      </div>
+    </div>
+    <div class="auth-error" id="welcome-error" style="margin-bottom:12px"></div>
+    <button class="btn btn-primary welcome-btn" onclick="WEL_start()">Empezar →</button>
+  </div>
+</div>
+
 <div id="auth-overlay" class="auth-overlay">
   <div class="auth-card">
     <div class="auth-logo">💬</div>
@@ -2176,7 +2305,20 @@ function onAuthSuccess(token, businessId, nombre) {
   // Actualizar sidebar con el nombre del negocio (fuente: respuesta del servidor)
   setSidebarName(nombre || newBid);
 
-  window._startDashboard && window._startDashboard();
+  // Cargar módulos desde config antes de arrancar el dashboard
+  var authToken = token;
+  fetch(API + '/config?businessId=' + encodeURIComponent(newBid), {
+    headers: { 'Authorization': 'Bearer ' + authToken }
+  }).then(function(r2) { return r2.ok ? r2.json() : null; })
+    .then(function(cfg) {
+      if (cfg) {
+        var mods = cfg.modulos_activos;
+        try { if (typeof mods === 'string') mods = JSON.parse(mods); } catch(_){}
+        if (Array.isArray(mods)) window.applyModulos && applyModulos(mods);
+      }
+      window._startDashboard && window._startDashboard();
+    })
+    .catch(function() { window._startDashboard && window._startDashboard(); });
 }
 
 window.switchAuthTab = function (tab) {
@@ -2245,7 +2387,18 @@ window.doRegister = function () {
   }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (!res.ok) { errEl.textContent = res.data.error || 'Error al registrarse'; return; }
-      onAuthSuccess(res.data.token, res.data.businessId, res.data.nombre);
+      // Guardar token y datos pero mostrar pantalla de bienvenida/módulos antes del dashboard
+      localStorage.setItem('chat_token', res.data.token);
+      BID = res.data.businessId || BID;
+      var u = new URL(window.location.href);
+      u.searchParams.set('businessId', BID);
+      window.history.replaceState(null, '', u.toString());
+      setSidebarName(res.data.nombre || BID);
+      var bidEl = document.getElementById('sidebar-bid');
+      if (bidEl) bidEl.textContent = BID;
+      // Mostrar welcome con pedidos preseleccionado
+      WEL_show(['pedidos']);
+      document.getElementById('auth-overlay').classList.add('hidden');
     })
     .catch(function () { errEl.textContent = 'Error de conexión'; })
     .finally(function () { btn.disabled = false; btn.textContent = 'Crear cuenta'; });
@@ -2328,6 +2481,35 @@ window._updateMobileHeader = function (nombre, pendingCount) {
 // ── Navigation ──────────────────────────────────────────────────────────────
 
 var _configLoaded = false;
+var MODULOS_ACTIVOS = ['pedidos']; // se actualiza desde loadConfig / applyModulos
+
+// Aplica visibilidad del sidebar y sección inicial según módulos activos
+window.applyModulos = function (arr) {
+  MODULOS_ACTIVOS = Array.isArray(arr) && arr.length ? arr : ['pedidos'];
+  var hasPedidos    = MODULOS_ACTIVOS.indexOf('pedidos')    !== -1;
+  var hasTurnos     = MODULOS_ACTIVOS.indexOf('turnos')     !== -1;
+  var hasInventario = MODULOS_ACTIVOS.indexOf('inventario') !== -1;
+  var navP = document.getElementById('nav-pedidos');
+  var navT = document.getElementById('nav-turnos');
+  var navI = document.getElementById('nav-inventario');
+  if (navP) navP.style.display = hasPedidos    ? '' : 'none';
+  if (navT) navT.style.display = hasTurnos     ? '' : 'none';
+  if (navI) navI.style.display = hasInventario ? '' : 'none';
+  // Mostrar/ocultar contenido de pedidos según módulo activo
+  var pOn  = document.getElementById('pedidos-module-on');
+  var pOff = document.getElementById('pedidos-module-off');
+  if (pOn)  pOn.style.display  = hasPedidos ? '' : 'none';
+  if (pOff) pOff.style.display = hasPedidos ? 'none' : 'flex';
+  // Si la sección activa fue desactivada, ir a la primera disponible
+  var active = document.querySelector('.nav-item.active');
+  var activeId = active ? active.id : '';
+  if ((activeId === 'nav-pedidos'    && !hasPedidos)   ||
+      (activeId === 'nav-turnos'     && !hasTurnos)    ||
+      (activeId === 'nav-inventario' && !hasInventario)) {
+    var first = hasPedidos ? 'pedidos' : hasTurnos ? 'turnos' : hasInventario ? 'inventario' : 'analytics';
+    showSection(first);
+  }
+};
 
 window.showSection = function (name) {
   document.getElementById('section-pedidos').classList.toggle('hidden',    name !== 'pedidos');
@@ -2388,7 +2570,19 @@ document.getElementById('sidebar-bid').textContent = BID;
         } else {
           setSidebarName(d.nombre || d.businessId || BID);
           document.getElementById('auth-overlay').classList.add('hidden');
-          window._startDashboard && window._startDashboard();
+          // Cargar módulos desde config antes de arrancar el dashboard
+          fetch(API + '/config?businessId=' + encodeURIComponent(BID), {
+            headers: { 'Authorization': 'Bearer ' + token }
+          }).then(function(r2) { return r2.ok ? r2.json() : null; })
+            .then(function(cfg) {
+              if (cfg) {
+                var mods = cfg.modulos_activos;
+                try { if (typeof mods === 'string') mods = JSON.parse(mods); } catch(_){}
+                if (Array.isArray(mods)) window.applyModulos && applyModulos(mods);
+              }
+              window._startDashboard && window._startDashboard();
+            })
+            .catch(function() { window._startDashboard && window._startDashboard(); });
         }
       });
     })
@@ -2404,6 +2598,88 @@ document.getElementById('sidebar-bid').textContent = BID;
   var hash = location.hash.replace('#', '');
   if (hash === 'config') showSection('config');
 })();
+
+// ── Welcome overlay (post-registro) ─────────────────────────────────────────
+
+var _welSelected = ['pedidos']; // módulos seleccionados en welcome
+
+window.WEL_show = function (preselected) {
+  _welSelected = Array.isArray(preselected) ? preselected.slice() : ['pedidos'];
+  ['pedidos','turnos','inventario','consultas'].forEach(function (mod) {
+    var card  = document.getElementById('wmod-' + mod);
+    var check = document.getElementById('wmod-check-' + mod);
+    var active = _welSelected.indexOf(mod) !== -1;
+    if (card)  card.classList.toggle('selected', active);
+    if (check) check.textContent = active ? '✓' : '';
+  });
+  var el = document.getElementById('welcome-overlay');
+  if (el) el.classList.remove('hidden');
+};
+
+window.WEL_toggle = function (mod) {
+  var idx = _welSelected.indexOf(mod);
+  if (idx === -1) { _welSelected.push(mod); } else { _welSelected.splice(idx, 1); }
+  var card  = document.getElementById('wmod-' + mod);
+  var check = document.getElementById('wmod-check-' + mod);
+  var active = _welSelected.indexOf(mod) !== -1;
+  if (card)  card.classList.toggle('selected', active);
+  if (check) check.textContent = active ? '✓' : '';
+};
+
+window.WEL_start = function () {
+  var errEl = document.getElementById('welcome-error');
+  if (errEl) errEl.textContent = '';
+  if (_welSelected.length === 0) {
+    if (errEl) errEl.textContent = 'Seleccioná al menos un módulo.';
+    return;
+  }
+  // Guardar módulos vía PUT /config (solo modulos_activos, resto con defaults)
+  apiFetch('/config', {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ modulos_activos: _welSelected })
+  }).catch(function () {}) // fire-and-forget — no bloquear si falla
+  .finally(function () {
+    // Cerrar welcome y entrar al dashboard
+    var el = document.getElementById('welcome-overlay');
+    if (el) el.classList.add('hidden');
+    applyModulos(_welSelected);
+    var first = _welSelected.indexOf('pedidos') !== -1 ? 'pedidos'
+              : _welSelected.indexOf('turnos')  !== -1 ? 'turnos'
+              : _welSelected.indexOf('inventario') !== -1 ? 'inventario'
+              : 'analytics';
+    showSection(first);
+    window._startDashboard && window._startDashboard();
+  });
+};
+
+// ── Config module toggles ────────────────────────────────────────────────────
+
+var _cfgModulos = ['pedidos']; // estado local del editor de módulos en config
+
+window.CFG_setModulos = function (arr) {
+  _cfgModulos = Array.isArray(arr) ? arr.slice() : ['pedidos'];
+  ['pedidos','turnos','inventario','consultas'].forEach(function (mod) {
+    var card   = document.getElementById('cmod-' + mod);
+    var toggle = document.getElementById('cmod-toggle-' + mod);
+    var active = _cfgModulos.indexOf(mod) !== -1;
+    if (card)   card.classList.toggle('selected', active);
+    if (toggle) toggle.textContent = active ? '✓' : '';
+  });
+};
+
+window.CFG_toggleMod = function (mod) {
+  var idx = _cfgModulos.indexOf(mod);
+  if (idx === -1) { _cfgModulos.push(mod); } else { _cfgModulos.splice(idx, 1); }
+  var card   = document.getElementById('cmod-' + mod);
+  var toggle = document.getElementById('cmod-toggle-' + mod);
+  var active = _cfgModulos.indexOf(mod) !== -1;
+  if (card)   card.classList.toggle('selected', active);
+  if (toggle) toggle.textContent = active ? '✓' : '';
+  if (typeof markDirty === 'function') markDirty();
+};
+
+window.CFG_getModulos = function () { return _cfgModulos.slice(); };
 </script>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -3071,6 +3347,12 @@ document.getElementById('sidebar-bid').textContent = BID;
         if (taEl) taEl.checked = !!cfg.turnos_activos;
         var tsEl = document.getElementById('f-turno-servicio');
         if (tsEl) tsEl.value = cfg.turno_servicio || 'Consulta';
+        // Módulos activos
+        var modulos = cfg.modulos_activos;
+        try { if (typeof modulos === 'string') modulos = JSON.parse(modulos); } catch(_) {}
+        if (!Array.isArray(modulos)) modulos = ['pedidos'];
+        window.CFG_setModulos && CFG_setModulos(modulos);
+        window.applyModulos && applyModulos(modulos);
         // Update sidebar with business name from DB
         if (cfg.nombre) setSidebarName(cfg.nombre);
         renderMenu();
@@ -3099,8 +3381,9 @@ document.getElementById('sidebar-bid').textContent = BID;
       welcome_msg:    document.getElementById('f-welcome').value.trim(),
       color_widget:   color,
       menu:           CS.menu,
-      turnos_activos: document.getElementById('f-turnos-activos') && document.getElementById('f-turnos-activos').checked ? 1 : 0,
-      turno_servicio: (document.getElementById('f-turno-servicio') && document.getElementById('f-turno-servicio').value.trim()) || 'Consulta'
+      turnos_activos:  document.getElementById('f-turnos-activos') && document.getElementById('f-turnos-activos').checked ? 1 : 0,
+      turno_servicio:  (document.getElementById('f-turno-servicio') && document.getElementById('f-turno-servicio').value.trim()) || 'Consulta',
+      modulos_activos: window.CFG_getModulos ? CFG_getModulos() : MODULOS_ACTIVOS
     };
     apiFetch('/config', {
       method:  'PUT',
@@ -3114,6 +3397,7 @@ document.getElementById('sidebar-bid').textContent = BID;
         st.className   = 'save-status ok';
         showToast('Configuración guardada correctamente', 'ok');
         if (body.nombre) setSidebarName(body.nombre);
+        if (body.modulos_activos) applyModulos(body.modulos_activos);
         setTimeout(function () { st.textContent = ''; st.className = 'save-status'; }, 4000);
       })
       .catch(function (e) {
@@ -3569,6 +3853,8 @@ document.getElementById('sidebar-bid').textContent = BID;
     renderMenu();
     var st = document.getElementById('save-status');
     if (st) { st.textContent = ''; st.className = 'save-status'; }
+    // Reset módulos a default
+    window.CFG_setModulos && CFG_setModulos(['pedidos']);
   };
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
