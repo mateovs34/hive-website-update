@@ -3730,23 +3730,31 @@ document.getElementById('sidebar-bid').textContent = BID;
     var dateStr = toDateStr(TR.selectedDate);
     apiFetch('/turnos/disponibles?fecha=' + dateStr)
       .then(function(slots) {
+        console.log('[Turnos] disponibles fecha=' + dateStr + ' slots=', slots);
         TR.disponibles = Array.isArray(slots) ? slots : [];
         renderDayView();
       })
-      .catch(function() { TR.disponibles = []; renderDayView(); });
+      .catch(function(e) {
+        console.error('[Turnos] loadDisponibles error:', e);
+        TR.disponibles = [];
+        renderDayView();
+      });
   }
 
   function loadTurnos(dateStr) {
-    apiFetch('/turnos' + (dateStr ? '?fecha=' + dateStr : ''))
+    var url = '/turnos' + (dateStr ? '?fecha=' + dateStr : '');
+    apiFetch(url)
       .then(function(rows) {
+        console.log('[Turnos] loadTurnos fecha=' + (dateStr || 'todos') + ' rows=', rows);
         if (!Array.isArray(rows)) return;
         if (dateStr) {
           TR.allTurnos[dateStr] = rows;
         } else {
-          // full reload
+          // full reload — mapear por fecha
           TR.allTurnos = {};
           rows.forEach(function(t) {
-            var ds = t.fecha ? t.fecha.slice(0,10) : null;
+            // fecha puede venir como "2026-04-09" o "2026-04-09T00:00:00.000Z"
+            var ds = t.fecha ? String(t.fecha).slice(0, 10) : null;
             if (!ds) return;
             if (!TR.allTurnos[ds]) TR.allTurnos[ds] = [];
             TR.allTurnos[ds].push(t);
@@ -3755,13 +3763,14 @@ document.getElementById('sidebar-bid').textContent = BID;
         renderDayView();
         renderMiniCal();
       })
-      .catch(function(){});
+      .catch(function(e){ console.error('[Turnos] loadTurnos error:', e); });
   }
 
   window._turnosLoad = function () {
+    var dateStr = toDateStr(TR.selectedDate);
     renderDateLabel();
     renderMiniCal();
-    loadTurnos();
+    loadTurnos(dateStr);   // carga solo el día seleccionado
     loadDisponibles();
     loadDispGrid();
   };

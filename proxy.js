@@ -205,9 +205,12 @@ function readBody(req) {
 
 function parseUrl(req) {
   var parsed = new URL(req.url, 'http://localhost');
+  var query  = {};
+  parsed.searchParams.forEach(function (v, k) { query[k] = v; });
   return {
     path:       parsed.pathname,
-    businessId: parsed.searchParams.get('businessId') || null
+    businessId: parsed.searchParams.get('businessId') || null,
+    query:      query
   };
 }
 
@@ -944,6 +947,7 @@ async function handleGetTurnos(businessId, res, query) {
        FROM turnos ${where} ORDER BY fecha, hora`,
       params
     );
+    console.log('[Turnos] GET fecha:', query.fecha || '(todos)', 'resultados:', result.rows.length);
     sendJSON(res, 200, result.rows);
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
