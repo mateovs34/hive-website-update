@@ -24,6 +24,7 @@ const crypto   = require('crypto');
 const { Pool } = require('pg');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
+const { Resend } = require('resend');
 
 const PORT           = process.env.PORT           || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -33,6 +34,11 @@ const ADMIN_PASSWORD       = process.env.ADMIN_PASSWORD       || null;
 const TWILIO_ACCOUNT_SID   = process.env.TWILIO_ACCOUNT_SID   || null;
 const TWILIO_AUTH_TOKEN    = process.env.TWILIO_AUTH_TOKEN    || null;
 const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+const RESEND_API_KEY       = process.env.RESEND_API_KEY       || null;
+const APP_URL              = process.env.APP_URL || 'https://chatbot-saas-production-0dae.up.railway.app';
+
+const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+if (!RESEND_API_KEY) console.warn('[Resend] RESEND_API_KEY no configurada — los emails de reset no se enviarán');
 
 if (!OPENAI_API_KEY) {
   console.error('Error: falta la variable de entorno OPENAI_API_KEY');
@@ -168,9 +174,10 @@ async function initSchema() {
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turnos_activos INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turno_servicio TEXT NOT NULL DEFAULT 'Consulta'`);
 
-  // Columnas de reset de contraseña
+  // Columnas de reset de contraseña y email de cuenta
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS reset_token TEXT`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS email TEXT`);
 
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
@@ -1099,17 +1106,21 @@ async function handleRegister(res, raw) {
                  .replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
   var nombre = String(body.nombre || 'Mi Negocio').slice(0, 100);
   var pass   = String(body.password || '');
+  var email  = String(body.email || '').toLowerCase().trim().slice(0, 200);
   if (!bid || bid.length < 3 || bid.length > 50) {
     return sendJSON(res, 400, { error: 'businessId inválido (3-50 caracteres: letras, números, guiones)' });
   }
   if (pass.length < 6) {
     return sendJSON(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
   }
+  if (!email || !email.includes('@')) {
+    return sendJSON(res, 400, { error: 'Email inválido' });
+  }
   try {
     var hash  = await bcrypt.hash(pass, 10);
     await pool.query(
-      `INSERT INTO negocios (business_id, nombre, password_hash) VALUES ($1, $2, $3)`,
-      [bid, nombre, hash]
+      `INSERT INTO negocios (business_id, nombre, password_hash, email) VALUES ($1, $2, $3, $4)`,
+      [bid, nombre, hash, email]
     );
     var token = jwt.sign({ businessId: bid, role: 'business' }, SECRET_KEY, { expiresIn: '7d' });
     sendJSON(res, 201, { ok: true, token: token, businessId: bid, nombre: nombre });
@@ -1188,23 +1199,55 @@ async function handleForgotPassword(res, raw) {
   if (!bid) return sendJSON(res, 400, { error: 'businessId requerido' });
   try {
     var result = await pool.query(
-      `SELECT business_id FROM negocios WHERE business_id = $1`,
+      `SELECT business_id, nombre, email FROM negocios WHERE business_id = $1`,
       [bid]
     );
     if (result.rows.length === 0) {
-      // No revelar si existe o no — respuesta genérica
-      return sendJSON(res, 200, { ok: true, message: 'Si el negocio existe, se generó un token de reset.' });
+      // Respuesta genérica — no revelar si el negocio existe
+      return sendJSON(res, 200, { ok: true, message: 'Si el negocio existe, te enviaremos un email.' });
     }
+    var row = result.rows[0];
+    if (!row.email) {
+      return sendJSON(res, 400, { error: 'Este negocio no tiene email registrado. Contactá al soporte.' });
+    }
+
     var token  = crypto.randomBytes(32).toString('hex');
     var expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
     await pool.query(
       `UPDATE negocios SET reset_token = $1, reset_token_expiry = $2 WHERE business_id = $3`,
       [token, expiry, bid]
     );
-    console.log('[Reset] token para', bid, ':', token);
-    // Sin email por ahora — devolver token directo
-    sendJSON(res, 200, { ok: true, token: token, businessId: bid });
-  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+    console.log('[Reset] token generado para', bid, '— email:', row.email);
+
+    if (!resendClient) {
+      console.warn('[Reset] Resend no configurado, token no enviado por email:', token);
+      return sendJSON(res, 200, { ok: true, message: 'Te enviaremos un email con instrucciones.' });
+    }
+
+    var resetLink = APP_URL + '/app?reset=' + token;
+    await resendClient.emails.send({
+      from:    'noreply@chatwidget.app',
+      to:      row.email,
+      subject: 'Resetear contraseña de tu ChatWidget',
+      html: [
+        '<div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0d1117;color:#e2e8f0;border-radius:12px">',
+        '  <h2 style="color:#6366f1;margin-top:0">💬 ChatWidget</h2>',
+        '  <p>Hola <strong>' + (row.nombre || bid) + '</strong>,</p>',
+        '  <p>Recibimos una solicitud para resetear la contraseña de tu cuenta <code>' + bid + '</code>.</p>',
+        '  <p>Hacé click en el botón para crear una nueva contraseña. El link expira en <strong>1 hora</strong>.</p>',
+        '  <a href="' + resetLink + '" style="display:inline-block;margin:20px 0;padding:12px 24px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Resetear contraseña</a>',
+        '  <p style="color:#64748b;font-size:13px">Si no solicitaste este reset, ignorá este email. Tu contraseña no cambiará.</p>',
+        '  <p style="color:#64748b;font-size:12px">O copiá este link:<br><code style="word-break:break-all">' + resetLink + '</code></p>',
+        '</div>'
+      ].join('\n')
+    });
+
+    console.log('[Reset] email enviado a', row.email);
+    sendJSON(res, 200, { ok: true, message: 'Te enviamos un email con instrucciones para resetear tu contraseña.' });
+  } catch (e) {
+    console.error('[Reset] Error:', e.message);
+    sendJSON(res, 500, { error: e.message });
+  }
 }
 
 // POST /auth/reset-password

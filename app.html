@@ -1748,6 +1748,11 @@ docker compose up --build -d</div>
         <input class="auth-input" id="auth-nombre-reg" type="text" placeholder="Pizza Roma">
       </div>
       <div class="auth-field-group">
+        <label>Email</label>
+        <input class="auth-input" id="auth-email-reg" type="email" placeholder="tu@email.com" autocomplete="email">
+        <div class="auth-hint">Se usará para recuperar tu contraseña.</div>
+      </div>
+      <div class="auth-field-group">
         <label>Contraseña <span style="color:var(--muted2)">(mínimo 6 caracteres)</span></label>
         <input class="auth-input" id="auth-pass-reg" type="password" placeholder="••••••••" autocomplete="new-password">
       </div>
@@ -1762,20 +1767,20 @@ docker compose up --build -d</div>
 
     <!-- Forgot password -->
     <div class="auth-form" id="auth-forgot-form" style="display:none">
-      <div class="auth-field-group">
-        <label>Business ID</label>
-        <input class="auth-input" id="auth-bid-forgot" type="text" placeholder="mi-negocio"
-               onkeydown="if(event.key==='Enter') doForgotPassword()">
-        <div class="auth-hint">Ingresá tu Business ID para generar un token de reset.</div>
+      <div id="auth-forgot-fields">
+        <div class="auth-field-group">
+          <label>Business ID</label>
+          <input class="auth-input" id="auth-bid-forgot" type="text" placeholder="mi-negocio"
+                 onkeydown="if(event.key==='Enter') doForgotPassword()">
+          <div class="auth-hint">Te enviaremos un link de reset al email registrado.</div>
+        </div>
+        <div class="auth-error" id="auth-forgot-error"></div>
+        <button class="auth-btn" id="auth-forgot-btn" onclick="doForgotPassword()">Enviar</button>
       </div>
-      <div class="auth-error" id="auth-forgot-error"></div>
       <div id="auth-forgot-result" style="display:none">
-        <div class="auth-token-label">Token de recuperación (copialo y usalo en el formulario de reset):</div>
-        <div class="auth-token-box" id="auth-forgot-token"></div>
-        <div class="auth-hint" style="margin-top:8px">También podés ir directo al reset haciendo click en el botón de abajo.</div>
-        <button class="auth-btn" style="margin-top:10px" onclick="goToResetFromForgot()">Ir a resetear contraseña →</button>
+        <div class="auth-success-msg" style="display:block;margin-bottom:12px">📧 Revisá tu email</div>
+        <p style="font-size:13px;color:var(--muted);text-align:center">Te enviamos un link para resetear tu contraseña. Revisá tu bandeja de entrada (y la carpeta de spam).</p>
       </div>
-      <button class="auth-btn" id="auth-forgot-btn" onclick="doForgotPassword()">Enviar</button>
       <button class="auth-link" onclick="switchAuthTab('login')">← Volver al login</button>
     </div>
 
@@ -1933,6 +1938,8 @@ window.switchAuthTab = function (tab) {
   ['auth-login-error','auth-register-error','auth-forgot-error','auth-reset-error'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.textContent = '';
   });
+  var forgotFields = document.getElementById('auth-forgot-fields');
+  if (forgotFields) forgotFields.style.display = '';
   var forgotResult = document.getElementById('auth-forgot-result');
   if (forgotResult) forgotResult.style.display = 'none';
   var resetSuccess = document.getElementById('auth-reset-success');
@@ -1962,18 +1969,20 @@ window.doRegister = function () {
   var bid     = (document.getElementById('auth-bid-reg').value || '').trim().toLowerCase()
                   .replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
   var nombre  = (document.getElementById('auth-nombre-reg').value || '').trim();
+  var email   = (document.getElementById('auth-email-reg').value || '').trim().toLowerCase();
   var pass    = document.getElementById('auth-pass-reg').value;
   var confirm = document.getElementById('auth-pass-confirm').value;
   var errEl   = document.getElementById('auth-register-error');
   var btn     = document.getElementById('auth-register-btn');
-  if (!bid || bid.length < 3) { errEl.textContent = 'Business ID debe tener al menos 3 caracteres'; return; }
-  if (!nombre)                 { errEl.textContent = 'Ingresá el nombre del negocio'; return; }
-  if (pass.length < 6)         { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
-  if (pass !== confirm)        { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  if (!bid || bid.length < 3)         { errEl.textContent = 'Business ID debe tener al menos 3 caracteres'; return; }
+  if (!nombre)                         { errEl.textContent = 'Ingresá el nombre del negocio'; return; }
+  if (!email || !email.includes('@'))  { errEl.textContent = 'Ingresá un email válido'; return; }
+  if (pass.length < 6)                 { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (pass !== confirm)                { errEl.textContent = 'Las contraseñas no coinciden'; return; }
   btn.disabled = true; btn.textContent = 'Creando cuenta…';
   fetch(API + '/auth/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body:   JSON.stringify({ businessId: bid, nombre: nombre, password: pass })
+    body:   JSON.stringify({ businessId: bid, nombre: nombre, email: email, password: pass })
   }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
       if (!res.ok) { errEl.textContent = res.data.error || 'Error al registrarse'; return; }
@@ -1984,8 +1993,6 @@ window.doRegister = function () {
 };
 
 // ── Forgot / Reset password ──────────────────────────────────────────────────
-
-var _forgotToken = null;
 
 window.doForgotPassword = function () {
   var bid   = (document.getElementById('auth-bid-forgot').value || '').trim().toLowerCase();
@@ -1998,30 +2005,13 @@ window.doForgotPassword = function () {
     body: JSON.stringify({ businessId: bid })
   }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
     .then(function (res) {
-      if (!res.ok) { errEl.textContent = res.data.error || 'Error'; return; }
-      if (res.data.token) {
-        _forgotToken = res.data.token;
-        document.getElementById('auth-forgot-token').textContent = res.data.token;
-        document.getElementById('auth-forgot-result').style.display = '';
-        btn.style.display = 'none';
-      } else {
-        // Respuesta genérica (negocio no existe)
-        errEl.textContent = '';
-        document.getElementById('auth-forgot-result').style.display = 'none';
-        btn.style.display = '';
-        errEl.textContent = res.data.message || 'Procesado.';
-      }
+      if (!res.ok) { errEl.textContent = res.data.error || 'Error al enviar'; return; }
+      // Éxito — ocultar formulario, mostrar confirmación
+      document.getElementById('auth-forgot-fields').style.display = 'none';
+      document.getElementById('auth-forgot-result').style.display = '';
     })
     .catch(function () { errEl.textContent = 'Error de conexión'; })
     .finally(function () { btn.disabled = false; btn.textContent = 'Enviar'; });
-};
-
-window.goToResetFromForgot = function () {
-  switchAuthTab('reset');
-  if (_forgotToken) {
-    var el = document.getElementById('auth-reset-token');
-    if (el) el.value = _forgotToken;
-  }
 };
 
 window.doResetPassword = function () {
@@ -2113,7 +2103,7 @@ document.getElementById('sidebar-bid').textContent = BID;
   if (bidInput && BID && BID !== 'default') bidInput.value = BID;
 
   var urlParams  = new URLSearchParams(location.search);
-  var resetToken = urlParams.get('token');
+  var resetToken = urlParams.get('reset') || urlParams.get('token');
   if (resetToken) {
     switchAuthTab('reset');
     var el = document.getElementById('auth-reset-token');
