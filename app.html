@@ -784,6 +784,11 @@
     .auth-btn:hover  { background: var(--accent-h); }
     .auth-btn:active { transform: scale(0.98); }
     .auth-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .auth-link { font-size: 12px; color: var(--accent); background: none; border: none; cursor: pointer; text-align: center; width: 100%; padding: 4px 0; text-decoration: underline; font-family: inherit; }
+    .auth-link:hover { color: var(--accent-h); }
+    .auth-token-box { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 12px; font-size: 12px; word-break: break-all; color: var(--text); margin-top: 4px; }
+    .auth-token-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .auth-success-msg { font-size: 13px; color: var(--green); text-align: center; }
     .logout-btn {
       margin-top: 8px; width: 100%; height: 30px;
       background: none; border: 1px solid var(--border);
@@ -1728,6 +1733,7 @@ docker compose up --build -d</div>
       </div>
       <div class="auth-error" id="auth-login-error"></div>
       <button class="auth-btn" id="auth-login-btn" onclick="doLogin()">Iniciar sesión</button>
+      <button class="auth-link" onclick="switchAuthTab('forgot')">¿Olvidaste tu contraseña?</button>
     </div>
 
     <!-- Register -->
@@ -1753,6 +1759,47 @@ docker compose up --build -d</div>
       <div class="auth-error" id="auth-register-error"></div>
       <button class="auth-btn" id="auth-register-btn" onclick="doRegister()">Crear cuenta</button>
     </div>
+
+    <!-- Forgot password -->
+    <div class="auth-form" id="auth-forgot-form" style="display:none">
+      <div class="auth-field-group">
+        <label>Business ID</label>
+        <input class="auth-input" id="auth-bid-forgot" type="text" placeholder="mi-negocio"
+               onkeydown="if(event.key==='Enter') doForgotPassword()">
+        <div class="auth-hint">Ingresá tu Business ID para generar un token de reset.</div>
+      </div>
+      <div class="auth-error" id="auth-forgot-error"></div>
+      <div id="auth-forgot-result" style="display:none">
+        <div class="auth-token-label">Token de recuperación (copialo y usalo en el formulario de reset):</div>
+        <div class="auth-token-box" id="auth-forgot-token"></div>
+        <div class="auth-hint" style="margin-top:8px">También podés ir directo al reset haciendo click en el botón de abajo.</div>
+        <button class="auth-btn" style="margin-top:10px" onclick="goToResetFromForgot()">Ir a resetear contraseña →</button>
+      </div>
+      <button class="auth-btn" id="auth-forgot-btn" onclick="doForgotPassword()">Enviar</button>
+      <button class="auth-link" onclick="switchAuthTab('login')">← Volver al login</button>
+    </div>
+
+    <!-- Reset password -->
+    <div class="auth-form" id="auth-reset-form" style="display:none">
+      <div class="auth-field-group">
+        <label>Token de reset</label>
+        <input class="auth-input" id="auth-reset-token" type="text" placeholder="Token recibido…">
+      </div>
+      <div class="auth-field-group">
+        <label>Nueva contraseña <span style="color:var(--muted2)">(mínimo 6 caracteres)</span></label>
+        <input class="auth-input" id="auth-reset-pass" type="password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="auth-field-group">
+        <label>Confirmar contraseña</label>
+        <input class="auth-input" id="auth-reset-confirm" type="password" placeholder="••••••••"
+               onkeydown="if(event.key==='Enter') doResetPassword()">
+      </div>
+      <div class="auth-error" id="auth-reset-error"></div>
+      <div class="auth-success-msg" id="auth-reset-success" style="display:none">✓ Contraseña actualizada. Ya podés iniciar sesión.</div>
+      <button class="auth-btn" id="auth-reset-btn" onclick="doResetPassword()">Cambiar contraseña</button>
+      <button class="auth-link" onclick="switchAuthTab('login')">← Volver al login</button>
+    </div>
+
   </div>
 </div>
 
@@ -1869,13 +1916,27 @@ function onAuthSuccess(token, businessId, nombre) {
 }
 
 window.switchAuthTab = function (tab) {
-  var isLogin = tab === 'login';
+  var isLogin    = tab === 'login';
+  var isRegister = tab === 'register';
+  var isForgot   = tab === 'forgot';
+  var isReset    = tab === 'reset';
   document.getElementById('tab-login-btn').classList.toggle('active', isLogin);
-  document.getElementById('tab-reg-btn').classList.toggle('active', !isLogin);
-  document.getElementById('auth-login-form').style.display    = isLogin ? '' : 'none';
-  document.getElementById('auth-register-form').style.display = isLogin ? 'none' : '';
-  document.getElementById('auth-login-error').textContent    = '';
-  document.getElementById('auth-register-error').textContent = '';
+  document.getElementById('tab-reg-btn').classList.toggle('active', isRegister);
+  document.getElementById('auth-login-form').style.display    = isLogin    ? '' : 'none';
+  document.getElementById('auth-register-form').style.display = isRegister ? '' : 'none';
+  document.getElementById('auth-forgot-form').style.display   = isForgot   ? '' : 'none';
+  document.getElementById('auth-reset-form').style.display    = isReset    ? '' : 'none';
+  // Mostrar/ocultar tabs bar solo en login/register
+  var tabsBar = document.querySelector('.auth-tabs');
+  if (tabsBar) tabsBar.style.display = (isLogin || isRegister) ? '' : 'none';
+  // Limpiar errores
+  ['auth-login-error','auth-register-error','auth-forgot-error','auth-reset-error'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.textContent = '';
+  });
+  var forgotResult = document.getElementById('auth-forgot-result');
+  if (forgotResult) forgotResult.style.display = 'none';
+  var resetSuccess = document.getElementById('auth-reset-success');
+  if (resetSuccess) resetSuccess.style.display = 'none';
 };
 
 window.doLogin = function () {
@@ -1920,6 +1981,74 @@ window.doRegister = function () {
     })
     .catch(function () { errEl.textContent = 'Error de conexión'; })
     .finally(function () { btn.disabled = false; btn.textContent = 'Crear cuenta'; });
+};
+
+// ── Forgot / Reset password ──────────────────────────────────────────────────
+
+var _forgotToken = null;
+
+window.doForgotPassword = function () {
+  var bid   = (document.getElementById('auth-bid-forgot').value || '').trim().toLowerCase();
+  var errEl = document.getElementById('auth-forgot-error');
+  var btn   = document.getElementById('auth-forgot-btn');
+  if (!bid) { errEl.textContent = 'Ingresá tu Business ID'; return; }
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  fetch(API + '/auth/forgot-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ businessId: bid })
+  }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.data.error || 'Error'; return; }
+      if (res.data.token) {
+        _forgotToken = res.data.token;
+        document.getElementById('auth-forgot-token').textContent = res.data.token;
+        document.getElementById('auth-forgot-result').style.display = '';
+        btn.style.display = 'none';
+      } else {
+        // Respuesta genérica (negocio no existe)
+        errEl.textContent = '';
+        document.getElementById('auth-forgot-result').style.display = 'none';
+        btn.style.display = '';
+        errEl.textContent = res.data.message || 'Procesado.';
+      }
+    })
+    .catch(function () { errEl.textContent = 'Error de conexión'; })
+    .finally(function () { btn.disabled = false; btn.textContent = 'Enviar'; });
+};
+
+window.goToResetFromForgot = function () {
+  switchAuthTab('reset');
+  if (_forgotToken) {
+    var el = document.getElementById('auth-reset-token');
+    if (el) el.value = _forgotToken;
+  }
+};
+
+window.doResetPassword = function () {
+  var token   = (document.getElementById('auth-reset-token').value   || '').trim();
+  var pass    = document.getElementById('auth-reset-pass').value;
+  var confirm = document.getElementById('auth-reset-confirm').value;
+  var errEl   = document.getElementById('auth-reset-error');
+  var successEl = document.getElementById('auth-reset-success');
+  var btn     = document.getElementById('auth-reset-btn');
+  if (!token)             { errEl.textContent = 'Ingresá el token de reset'; return; }
+  if (pass.length < 6)   { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (pass !== confirm)  { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  fetch(API + '/auth/reset-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token, newPassword: pass })
+  }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) { errEl.textContent = res.data.error || 'Error'; return; }
+      successEl.style.display = '';
+      btn.style.display = 'none';
+      // Redirigir al login tras 2 segundos
+      setTimeout(function () { switchAuthTab('login'); }, 2000);
+    })
+    .catch(function () { errEl.textContent = 'Error de conexión'; })
+    .finally(function () { btn.disabled = false; btn.textContent = 'Cambiar contraseña'; });
 };
 
 // ── Mobile sidebar ───────────────────────────────────────────────────────────
@@ -1978,10 +2107,18 @@ window.showSection = function (name) {
 // Bootstrap sidebar labels
 document.getElementById('sidebar-bid').textContent = BID;
 
-// Pre-fill login form with BID from URL
+// Pre-fill login form with BID from URL; open reset form if ?token= present
 (function () {
   var bidInput = document.getElementById('auth-bid-login');
   if (bidInput && BID && BID !== 'default') bidInput.value = BID;
+
+  var urlParams  = new URLSearchParams(location.search);
+  var resetToken = urlParams.get('token');
+  if (resetToken) {
+    switchAuthTab('reset');
+    var el = document.getElementById('auth-reset-token');
+    if (el) el.value = resetToken;
+  }
 })();
 
 // Check auth on load

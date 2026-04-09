@@ -20,6 +20,7 @@ const http     = require('http');
 const https    = require('https');
 const fs       = require('fs');
 const path     = require('path');
+const crypto   = require('crypto');
 const { Pool } = require('pg');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
@@ -166,6 +167,10 @@ async function initSchema() {
   // Columnas de turnos en negocios (migraciones no destructivas)
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turnos_activos INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turno_servicio TEXT NOT NULL DEFAULT 'Consulta'`);
+
+  // Columnas de reset de contraseña
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS reset_token TEXT`);
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMPTZ`);
 
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
@@ -1174,6 +1179,62 @@ function handleVerify(req, res) {
   });
 }
 
+// POST /auth/forgot-password
+async function handleForgotPassword(res, raw) {
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var bid = String(body.businessId || '').toLowerCase().trim();
+  if (!bid) return sendJSON(res, 400, { error: 'businessId requerido' });
+  try {
+    var result = await pool.query(
+      `SELECT business_id FROM negocios WHERE business_id = $1`,
+      [bid]
+    );
+    if (result.rows.length === 0) {
+      // No revelar si existe o no — respuesta genérica
+      return sendJSON(res, 200, { ok: true, message: 'Si el negocio existe, se generó un token de reset.' });
+    }
+    var token  = crypto.randomBytes(32).toString('hex');
+    var expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await pool.query(
+      `UPDATE negocios SET reset_token = $1, reset_token_expiry = $2 WHERE business_id = $3`,
+      [token, expiry, bid]
+    );
+    console.log('[Reset] token para', bid, ':', token);
+    // Sin email por ahora — devolver token directo
+    sendJSON(res, 200, { ok: true, token: token, businessId: bid });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+// POST /auth/reset-password
+async function handleResetPassword(res, raw) {
+  var body; try { body = JSON.parse(raw); } catch (_) {
+    return sendJSON(res, 400, { error: 'invalid_json' });
+  }
+  var token    = String(body.token       || '').trim();
+  var newPass  = String(body.newPassword || '');
+  if (!token)           return sendJSON(res, 400, { error: 'token requerido' });
+  if (newPass.length < 6) return sendJSON(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
+  try {
+    var result = await pool.query(
+      `SELECT business_id FROM negocios WHERE reset_token = $1 AND reset_token_expiry > NOW()`,
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return sendJSON(res, 400, { error: 'Token inválido o expirado' });
+    }
+    var bid  = result.rows[0].business_id;
+    var hash = await bcrypt.hash(newPass, 10);
+    await pool.query(
+      `UPDATE negocios SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE business_id = $2`,
+      [hash, bid]
+    );
+    console.log('[Reset] contraseña actualizada para', bid);
+    sendJSON(res, 200, { ok: true, message: 'Contraseña actualizada correctamente' });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
 // ── WhatsApp webhook ──────────────────────────────────────────────────────────
 
 async function handleWhatsAppWebhook(req, res) {
@@ -1484,6 +1545,16 @@ var server = http.createServer(function (req, res) {
 
   if (req.method === 'GET' && u.path === '/auth/verify') {
     return handleVerify(req, res);
+  }
+
+  if (req.method === 'POST' && u.path === '/auth/forgot-password') {
+    return readBody(req).then(function (r) { return handleForgotPassword(res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  if (req.method === 'POST' && u.path === '/auth/reset-password') {
+    return readBody(req).then(function (r) { return handleResetPassword(res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
   }
 
   // ── Admin endpoints (requieren rol admin) ─────────────────────────────────
