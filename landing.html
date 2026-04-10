@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrdenBot — Tu negocio, atendido por IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0a;
+    --bg2:      #111111;
+    --bg3:      #161616;
+    --surface:  #1a1a1a;
+    --surface2: #222222;
+    --border:   rgba(255,255,255,0.08);
+    --border2:  rgba(255,255,255,0.14);
+    --text:     #f0f0f0;
+    --muted:    #888;
+    --muted2:   #555;
+    --accent:   #6366f1;
+    --accent-h: #818cf8;
+    --accent-d: #4f52d4;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --glow:     rgba(99,102,241,0.25);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Utilities ─────────────────────────────────────────────────────────── */
+  .container { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  .section    { padding: 100px 0; }
+  .section-sm { padding: 70px 0; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+    color: var(--accent-h); font-size: 12px; font-weight: 600;
+    padding: 5px 14px; border-radius: 100px; letter-spacing: .04em; text-transform: uppercase;
+  }
+
+  .section-label {
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent-h); margin-bottom: 14px;
+  }
+
+  .headline {
+    font-size: clamp(36px, 5vw, 62px); font-weight: 900; line-height: 1.08;
+    letter-spacing: -0.03em; color: #fff;
+  }
+  .headline span { color: var(--accent-h); }
+
+  .subheadline {
+    font-size: 18px; color: var(--muted); line-height: 1.7; max-width: 520px;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 26px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    cursor: pointer; text-decoration: none; border: none; transition: all .2s;
+    font-family: 'Inter', sans-serif;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+    box-shadow: 0 0 0 0 var(--glow);
+  }
+  .btn-primary:hover {
+    background: var(--accent-h);
+    box-shadow: 0 0 30px var(--glow), 0 0 60px var(--glow);
+    transform: translateY(-1px);
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border2);
+  }
+  .btn-ghost:hover { background: var(--surface); border-color: var(--border2); }
+
+  /* ── Scroll animations ─────────────────────────────────────────────────── */
+  .reveal {
+    opacity: 0; transform: translateY(32px);
+    transition: opacity .65s ease, transform .65s ease;
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+  .reveal-delay-1 { transition-delay: .1s; }
+  .reveal-delay-2 { transition-delay: .2s; }
+  .reveal-delay-3 { transition-delay: .3s; }
+  .reveal-delay-4 { transition-delay: .4s; }
+
+  /* ── NAV ────────────────────────────────────────────────────────────────── */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(10,10,10,0.85);
+    border-bottom: 1px solid var(--border);
+    transition: border-color .3s;
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px; max-width: 1160px; margin: 0 auto; padding: 0 24px;
+  }
+  .nav-logo {
+    font-size: 20px; font-weight: 800; color: #fff; text-decoration: none;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .nav-logo-icon {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .nav-links { display: flex; align-items: center; gap: 32px; }
+  .nav-links a {
+    color: var(--muted); font-size: 14px; font-weight: 500; text-decoration: none;
+    transition: color .2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta { display: flex; align-items: center; gap: 12px; }
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .nav-cta .btn-ghost { display: none; }
+  }
+
+  /* ── HERO ───────────────────────────────────────────────────────────────── */
+  .hero {
+    padding: 160px 0 100px;
+    position: relative; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 800px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-inner {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
+  }
+  .hero-left { position: relative; z-index: 1; }
+  .hero-badge { margin-bottom: 24px; }
+  .hero-headline { margin-bottom: 20px; }
+  .hero-sub { margin-bottom: 36px; }
+  .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; }
+  .hero-right { display: flex; justify-content: center; align-items: center; }
+
+  /* Stats bar */
+  .hero-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--border);
+    border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    margin-top: 70px;
+  }
+  .hero-stat {
+    background: var(--surface); padding: 24px 20px; text-align: center;
+  }
+  .hero-stat-value {
+    font-size: 28px; font-weight: 800; color: #fff; letter-spacing: -0.02em;
+  }
+  .hero-stat-value span { color: var(--accent-h); }
+  .hero-stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+
+  @media (max-width: 900px) {
+    .hero-inner { grid-template-columns: 1fr; }
+    .hero-right { order: -1; }
+    .hero-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .hero-stats { grid-template-columns: 1fr 1fr; }
+    .hero { padding: 120px 0 60px; }
+  }
+
+  /* ── PHONE MOCKUP ──────────────────────────────────────────────────────── */
+  .phone-wrap { position: relative; }
+  .phone-glow {
+    position: absolute; inset: -40px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 65%);
+    pointer-events: none; z-index: 0;
+  }
+  .phone {
+    position: relative; z-index: 1;
+    width: 280px; height: 580px;
+    background: #1a1a1a;
+    border-radius: 44px;
+    border: 2px solid rgba(255,255,255,0.12);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 40px 80px rgba(0,0,0,0.6),
+      0 0 60px rgba(99,102,241,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.1);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .phone-notch {
+    width: 100px; height: 28px; background: #0a0a0a;
+    border-radius: 0 0 16px 16px; margin: 0 auto; flex-shrink: 0;
+  }
+  .phone-header {
+    background: #075e54; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .phone-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .phone-contact { flex: 1; }
+  .phone-contact-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .phone-contact-status { font-size: 11px; color: rgba(255,255,255,0.7); }
+  .phone-body {
+    flex: 1; background: #ece5dd; padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 6px;
+    overflow: hidden; position: relative;
+  }
+  .chat-msg {
+    max-width: 75%; padding: 7px 10px; border-radius: 8px;
+    font-size: 12px; line-height: 1.4; position: relative;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .chat-msg.visible { opacity: 1; transform: translateY(0); }
+  .chat-msg.bot {
+    background: #fff; color: #111; align-self: flex-start;
+    border-radius: 0 8px 8px 8px;
+  }
+  .chat-msg.user {
+    background: #dcf8c6; color: #111; align-self: flex-end;
+    border-radius: 8px 0 8px 8px;
+  }
+  .chat-msg .time { font-size: 9px; color: #999; margin-top: 3px; text-align: right; }
+  .typing-indicator {
+    display: flex; align-items: center; gap: 4px;
+    background: #fff; padding: 10px 12px; border-radius: 0 8px 8px 8px;
+    width: fit-content; opacity: 0; transition: opacity .3s;
+  }
+  .typing-indicator.visible { opacity: 1; }
+  .typing-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #999;
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: .2s; }
+  .typing-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-5px); }
+  }
+
+  /* ── PROBLEMA ───────────────────────────────────────────────────────────── */
+  .problema-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px;
+  }
+  .problema-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px;
+    position: relative; overflow: hidden;
+  }
+  .problema-card.bad { border-color: rgba(239,68,68,0.2); }
+  .problema-card.good {
+    border-color: rgba(99,102,241,0.4);
+    background: linear-gradient(135deg, rgba(99,102,241,0.06) 0%, var(--surface) 60%);
+  }
+  .problema-card-icon { font-size: 28px; margin-bottom: 14px; }
+  .problema-card-title { font-size: 17px; font-weight: 700; margin-bottom: 10px; color: #fff; }
+  .problema-card ul { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .problema-card li { font-size: 13px; color: var(--muted); display: flex; align-items: flex-start; gap: 8px; }
+  .problema-card li::before { content: '×'; color: var(--red); font-weight: 700; flex-shrink: 0; }
+  .problema-card.good li::before { content: '✓'; color: var(--green); }
+  .problema-card.good li { color: var(--text); }
+  @media (max-width: 768px) { .problema-grid { grid-template-columns: 1fr; } }
+
+  /* ── CÓMO FUNCIONA ─────────────────────────────────────────────────────── */
+  .steps-wrap { position: relative; margin-top: 60px; }
+  .steps-line {
+    position: absolute; top: 28px; left: calc(10% + 28px); right: calc(10% + 28px);
+    height: 2px; background: linear-gradient(90deg, var(--accent) 0%, var(--accent-h) 100%);
+    z-index: 0;
+  }
+  .steps-line-fill {
+    height: 100%; width: 0%; background: var(--accent-h);
+    transition: width 1.5s ease;
+  }
+  .steps {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px;
+    position: relative; z-index: 1;
+  }
+  .step { text-align: center; }
+  .step-num {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--surface2); border: 2px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; color: var(--accent-h);
+    margin: 0 auto 16px; position: relative; z-index: 1;
+    box-shadow: 0 0 0 4px var(--bg), 0 0 20px var(--glow);
+  }
+  .step-icon { font-size: 22px; margin-bottom: 10px; }
+  .step-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .step-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  @media (max-width: 768px) {
+    .steps { grid-template-columns: 1fr; }
+    .steps-line { display: none; }
+  }
+
+  /* ── FEATURES ───────────────────────────────────────────────────────────── */
+  .features-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px;
+  }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px;
+    transition: border-color .25s, transform .25s;
+  }
+  .feature-card:hover {
+    border-color: rgba(99,102,241,0.4);
+    transform: translateY(-3px);
+  }
+  .feature-icon {
+    width: 48px; height: 48px; background: rgba(99,102,241,0.12);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 18px;
+  }
+  .feature-title { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .feature-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  /* Mini visualizations inside feature cards */
+  .mini-cal {
+    margin-top: 14px; display: grid; grid-template-columns: repeat(7,1fr); gap: 3px;
+  }
+  .mini-cal-day {
+    height: 16px; border-radius: 3px; background: var(--surface2);
+  }
+  .mini-cal-day.booked { background: var(--accent); }
+  .mini-cal-day.today  { background: var(--accent-h); }
+  .mini-bars { margin-top: 14px; display: flex; align-items: flex-end; gap: 4px; height: 32px; }
+  .mini-bar { flex: 1; border-radius: 3px 3px 0 0; background: var(--accent); transition: height .5s ease; }
+  .mini-stat-row { margin-top: 14px; display: flex; flex-direction: column; gap: 5px; }
+  .mini-stat-line {
+    display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted);
+  }
+  .mini-stat-bar { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .mini-stat-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+
+  @media (max-width: 900px) { .features-grid { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 560px) { .features-grid { grid-template-columns: 1fr; } }
+
+  /* ── INDUSTRIAS ─────────────────────────────────────────────────────────── */
+  .industry-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px;
+  }
+  .industry-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 28px 24px;
+    cursor: pointer; transition: all .25s; text-decoration: none; color: inherit;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .industry-card:hover {
+    background: var(--surface2); border-color: rgba(99,102,241,0.35);
+    transform: translateY(-2px);
+  }
+  .industry-emoji { font-size: 32px; }
+  .industry-name { font-size: 16px; font-weight: 700; color: #fff; }
+  .industry-desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  @media (max-width: 768px) { .industry-grid { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width: 480px) { .industry-grid { grid-template-columns: 1fr; } }
+
+  /* ── NÚMEROS ANIMADOS ───────────────────────────────────────────────────── */
+  .numbers-section {
+    background: linear-gradient(135deg, #0f0f1a 0%, #0a0a0a 100%);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 90px 0;
+  }
+  .numbers-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border); border-radius: 16px; overflow: hidden;
+  }
+  .number-card {
+    background: var(--bg2); padding: 44px 24px; text-align: center;
+  }
+  .number-value {
+    font-size: 56px; font-weight: 900; letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #fff 0%, var(--accent-h) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; line-height: 1;
+  }
+  .number-label { font-size: 14px; color: var(--muted); margin-top: 10px; font-weight: 500; }
+  @media (max-width: 768px) {
+    .numbers-grid { grid-template-columns: repeat(2,1fr); }
+    .number-value { font-size: 42px; }
+  }
+
+  /* ── DEMO ───────────────────────────────────────────────────────────────── */
+  .demo-section {
+    padding: 100px 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.08) 0%, transparent 60%);
+  }
+  .demo-inner {
+    display: grid; grid-template-columns: 1fr 400px; gap: 60px; align-items: center;
+  }
+  .demo-info h2 { font-size: clamp(28px,4vw,44px); font-weight: 800; color: #fff; margin-bottom: 16px; }
+  .demo-info p  { font-size: 16px; color: var(--muted); margin-bottom: 28px; line-height: 1.7; }
+  .demo-phone-wrap { display: flex; justify-content: center; }
+  .demo-phone {
+    width: 300px; height: 560px;
+    background: #1a1a1a; border-radius: 40px;
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 60px rgba(99,102,241,0.1);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .demo-header {
+    background: #075e54; padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .demo-av {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .demo-contact-name { font-size: 14px; font-weight: 600; color: #fff; }
+  .demo-contact-sub  { font-size: 11px; color: rgba(255,255,255,0.65); }
+  .demo-body {
+    flex: 1; background: #ece5dd; padding: 14px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto; position: relative;
+  }
+  .demo-notch {
+    width: 90px; height: 24px; background: #0a0a0a;
+    border-radius: 0 0 14px 14px; margin: 0 auto; flex-shrink: 0;
+  }
+  .demo-input-row {
+    background: #f0f0f0; padding: 10px 14px;
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    border-top: 1px solid rgba(0,0,0,0.1);
+  }
+  .demo-input {
+    flex: 1; background: #fff; border: none; border-radius: 20px;
+    padding: 9px 14px; font-size: 13px; outline: none; font-family: 'Inter', sans-serif;
+    color: #111;
+  }
+  .demo-send-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 15px; flex-shrink: 0; transition: background .2s;
+  }
+  .demo-send-btn:hover { background: var(--accent-h); }
+  .demo-msg {
+    max-width: 78%; padding: 8px 11px; border-radius: 8px;
+    font-size: 13px; line-height: 1.4; color: #111;
+  }
+  .demo-msg.bot { background: #fff; align-self: flex-start; border-radius: 0 8px 8px 8px; }
+  .demo-msg.user { background: #dcf8c6; align-self: flex-end; border-radius: 8px 0 8px 8px; }
+  .demo-msg .dm-time { font-size: 9px; color: #999; margin-top: 3px; text-align: right; }
+  .demo-typing {
+    display: flex; align-items: center; gap: 4px;
+    background: #fff; padding: 10px 12px; border-radius: 0 8px 8px 8px;
+    width: fit-content; display: none;
+  }
+  .demo-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #aaa;
+    animation: typingBounce 1.2s infinite;
+  }
+  .demo-dot:nth-child(2) { animation-delay: .2s; }
+  .demo-dot:nth-child(3) { animation-delay: .4s; }
+  @media (max-width: 900px) {
+    .demo-inner { grid-template-columns: 1fr; }
+    .demo-phone-wrap { order: -1; }
+  }
+
+  /* ── PRECIOS ─────────────────────────────────────────────────────────────── */
+  .pricing-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px;
+    align-items: start;
+  }
+  .pricing-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 32px 28px; position: relative;
+  }
+  .pricing-card.featured {
+    border-color: var(--accent);
+    background: linear-gradient(160deg, rgba(99,102,241,0.08) 0%, var(--surface) 50%);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 40px var(--glow);
+    transform: scale(1.02);
+  }
+  .pricing-badge-top {
+    position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 700; padding: 4px 14px; border-radius: 100px;
+    letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+  }
+  .pricing-plan { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em; }
+  .pricing-price {
+    font-size: 46px; font-weight: 900; color: #fff; letter-spacing: -0.03em;
+    line-height: 1; margin-bottom: 4px;
+  }
+  .pricing-price sup { font-size: 22px; vertical-align: top; margin-top: 8px; }
+  .pricing-period { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+  .pricing-desc { font-size: 13px; color: var(--muted); margin-bottom: 24px; line-height: 1.6; }
+  .pricing-divider { height: 1px; background: var(--border); margin-bottom: 24px; }
+  .pricing-features { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-bottom: 28px; }
+  .pricing-features li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text); }
+  .pricing-features li .check { color: var(--green); font-size: 15px; flex-shrink: 0; }
+  .pricing-features li .cross { color: var(--muted2); font-size: 15px; flex-shrink: 0; }
+  .pricing-btn { width: 100%; text-align: center; justify-content: center; }
+  @media (max-width: 900px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+    .pricing-card.featured { transform: none; }
+  }
+
+  /* ── TABLA COMPARATIVA ─────────────────────────────────────────────────── */
+  .compare-section { padding: 80px 0; }
+  .compare-wrap { overflow-x: auto; margin-top: 48px; }
+  .compare-table {
+    width: 100%; border-collapse: collapse; min-width: 600px;
+  }
+  .compare-table th {
+    padding: 16px 20px; text-align: center; font-size: 13px; font-weight: 700;
+    color: var(--muted); border-bottom: 1px solid var(--border);
+  }
+  .compare-table th:first-child { text-align: left; }
+  .compare-table th.hl { color: var(--accent-h); }
+  .compare-table td {
+    padding: 14px 20px; font-size: 14px; color: var(--muted);
+    border-bottom: 1px solid rgba(255,255,255,0.04); text-align: center;
+  }
+  .compare-table td:first-child { text-align: left; color: var(--text); font-weight: 500; }
+  .compare-table td.hl {
+    background: rgba(99,102,241,0.04); color: var(--text);
+  }
+  .compare-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .check-icon { color: var(--green); font-size: 17px; }
+  .cross-icon { color: var(--muted2); font-size: 17px; }
+  .partial { color: var(--accent-h); font-size: 12px; }
+
+  /* ── CTA FINAL ──────────────────────────────────────────────────────────── */
+  .cta-section {
+    padding: 120px 0;
+    text-align: center;
+    background: radial-gradient(ellipse at 50% 100%, rgba(99,102,241,0.12) 0%, transparent 60%);
+  }
+  .cta-section .headline { margin-bottom: 16px; }
+  .cta-section .subheadline { margin: 0 auto 36px; text-align: center; }
+  .cta-btns { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── FOOTER ─────────────────────────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 48px 0;
+    color: var(--muted);
+  }
+  .footer-inner {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;
+  }
+  .footer-logo { font-size: 16px; font-weight: 800; color: #fff; text-decoration: none; }
+  .footer-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .footer-links a { color: var(--muted); font-size: 13px; text-decoration: none; transition: color .2s; }
+  .footer-links a:hover { color: var(--text); }
+  .footer-copy { font-size: 12px; color: var(--muted2); }
+
+  /* ── Section separator ─────────────────────────────────────────────────── */
+  .sep { height: 1px; background: var(--border); }
+
+  /* Center helper */
+  .text-center { text-align: center; }
+  .text-center .subheadline { margin: 12px auto 0; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════ NAV ════════════════ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon">🤖</div>
+      OrdenBot
+    </a>
+    <div class="nav-links">
+      <a href="#features">Características</a>
+      <a href="#demo">Demo</a>
+      <a href="#precios">Precios</a>
+      <a href="#industrias">Industrias</a>
+    </div>
+    <div class="nav-cta">
+      <a href="#precios" class="btn btn-ghost" style="padding:10px 18px;font-size:14px">Ver planes</a>
+      <a href="https://chatbot-saas-production-0dae.up.railway.app/app" class="btn btn-primary" style="padding:10px 18px;font-size:14px">Empezar gratis →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════════════ HERO ════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-inner">
+
+      <div class="hero-left">
+        <div class="hero-badge reveal">
+          <span class="badge">✦ Para comercios, consultorios, wellness y más</span>
+        </div>
+        <h1 class="headline hero-headline reveal reveal-delay-1">
+          Tu negocio,<br>atendido por<br><span>inteligencia artificial.</span>
+        </h1>
+        <p class="subheadline hero-sub reveal reveal-delay-2">
+          Automatizá pedidos, turnos e inventario por WhatsApp. Sin apps, sin llamadas, sin errores. Configurado en 3 minutos.
+        </p>
+        <div class="hero-ctas reveal reveal-delay-3">
+          <a href="https://chatbot-saas-production-0dae.up.railway.app/app" class="btn btn-primary">
+            Empezar gratis — sin tarjeta
+          </a>
+          <a href="#demo" class="btn btn-ghost">Ver demo en vivo →</a>
+        </div>
+      </div>
+
+      <div class="hero-right reveal reveal-delay-2">
+        <div class="phone-wrap">
+          <div class="phone-glow"></div>
+          <div class="phone">
+            <div class="phone-notch"></div>
+            <div class="phone-header">
+              <div class="phone-avatar">🤖</div>
+              <div class="phone-contact">
+                <div class="phone-contact-name">OrdenBot</div>
+                <div class="phone-contact-status">● en línea</div>
+              </div>
+            </div>
+            <div class="phone-body" id="hero-chat">
+              <div class="typing-indicator" id="hero-typing">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Stats -->
+    <div class="hero-stats reveal reveal-delay-3">
+      <div class="hero-stat">
+        <div class="hero-stat-value"><span>3</span> min</div>
+        <div class="hero-stat-label">Configuración</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value"><span>+40%</span></div>
+        <div class="hero-stat-label">Más ventas</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value"><span>24/7</span></div>
+        <div class="hero-stat-label">Siempre activo</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value"><span>100%</span></div>
+        <div class="hero-stat-label">Métricas en vivo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ PROBLEMA ════════════════ -->
+<section class="section">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">El problema</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Los negocios pierden dinero<br>sin datos ni automatización.</h2>
+      <p class="subheadline" style="margin:14px auto 0">Cada llamada sin respuesta, cada error de pedido y cada turno mal coordinado te cuesta dinero real.</p>
+    </div>
+    <div class="problema-grid">
+      <div class="problema-card bad reveal reveal-delay-1">
+        <div class="problema-card-icon">📋</div>
+        <div class="problema-card-title">Menú físico o PDF</div>
+        <ul>
+          <li>No se actualiza en tiempo real</li>
+          <li>Sin stock ni precios dinámicos</li>
+          <li>El cliente tiene que preguntar todo</li>
+          <li>Errores de pedido constantes</li>
+        </ul>
+      </div>
+      <div class="problema-card bad reveal reveal-delay-2">
+        <div class="problema-card-icon">📞</div>
+        <div class="problema-card-title">Recepcionista manual</div>
+        <ul>
+          <li>Solo funciona en horario laboral</li>
+          <li>Costoso e inconsistente</li>
+          <li>Sin métricas de conversión</li>
+          <li>Un turno mal anotado = problema</li>
+        </ul>
+      </div>
+      <div class="problema-card good reveal reveal-delay-3">
+        <div class="problema-card-icon">🤖</div>
+        <div class="problema-card-title">OrdenBot</div>
+        <ul>
+          <li>Atiende 24/7 sin pausas</li>
+          <li>Stock, turnos y pedidos en tiempo real</li>
+          <li>Dashboard con todas las métricas</li>
+          <li>Sin errores, sin omisiones</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ CÓMO FUNCIONA ════════════════ -->
+<section class="section" style="background:var(--bg2)">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Proceso</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Tan simple como<br>una conversación.</h2>
+    </div>
+    <div class="steps-wrap reveal reveal-delay-1">
+      <div class="steps-line"><div class="steps-line-fill" id="steps-fill"></div></div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-icon">💬</div>
+          <div class="step-title">Cliente escribe</div>
+          <div class="step-desc">El cliente manda un mensaje por WhatsApp o el chat del sitio</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-icon">🤖</div>
+          <div class="step-title">Bot responde</div>
+          <div class="step-desc">La IA procesa con el contexto completo de tu negocio</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-icon">✅</div>
+          <div class="step-title">Cliente elige</div>
+          <div class="step-desc">Selecciona productos, horarios o hace consultas</div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-icon">📩</div>
+          <div class="step-title">Confirmación</div>
+          <div class="step-desc">Pedido o turno registrado automáticamente en la DB</div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-icon">📊</div>
+          <div class="step-title">Vos ves todo</div>
+          <div class="step-desc">Dashboard en tiempo real con todas las métricas</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ FEATURES ════════════════ -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Características</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Todo lo que tu negocio necesita,<br><span style="color:var(--accent-h)">en un solo lugar.</span></h2>
+    </div>
+    <div class="features-grid">
+
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3" stroke="#6366f1" stroke-width="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="15" r="1.5" fill="#6366f1"/><circle cx="12" cy="15" r="1.5" fill="#6366f1"/></svg>
+        </div>
+        <div class="feature-title">Gestión de turnos</div>
+        <div class="feature-desc">Agenda inteligente con disponibilidad en tiempo real. Reservas automáticas sin intervención humana.</div>
+        <div class="mini-cal">
+          <div class="mini-cal-day booked"></div><div class="mini-cal-day booked"></div>
+          <div class="mini-cal-day"></div><div class="mini-cal-day booked"></div>
+          <div class="mini-cal-day today"></div><div class="mini-cal-day"></div>
+          <div class="mini-cal-day booked"></div><div class="mini-cal-day booked"></div>
+          <div class="mini-cal-day"></div><div class="mini-cal-day booked"></div>
+          <div class="mini-cal-day booked"></div><div class="mini-cal-day"></div>
+          <div class="mini-cal-day booked"></div><div class="mini-cal-day booked"></div>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 9m12-9l2 9" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="feature-title">Stock en tiempo real</div>
+        <div class="feature-desc">El bot conoce tu inventario al instante. Nunca confirmes un producto agotado.</div>
+        <div class="mini-bars">
+          <div class="mini-bar" style="height:60%"></div>
+          <div class="mini-bar" style="height:100%"></div>
+          <div class="mini-bar" style="height:40%"></div>
+          <div class="mini-bar" style="height:80%"></div>
+          <div class="mini-bar" style="height:55%"></div>
+          <div class="mini-bar" style="height:90%"></div>
+          <div class="mini-bar" style="height:30%"></div>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="feature-title">Bot de WhatsApp</div>
+        <div class="feature-desc">Sin descargar apps. El cliente usa el WhatsApp que ya tiene. Integración directa, lista en minutos.</div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:5px">
+          <div style="background:#dcf8c6;border-radius:8px 8px 0 8px;padding:6px 10px;font-size:11px;color:#111;align-self:flex-end">Quiero una pizza margherita 🍕</div>
+          <div style="background:#fff;border-radius:0 8px 8px 8px;padding:6px 10px;font-size:11px;color:#111;align-self:flex-start">¡Perfecto! Pedido registrado ✅ En 30 min está listo.</div>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="feature-title">Dashboard de métricas</div>
+        <div class="feature-desc">Pedidos, conversiones, facturación y conversaciones — todo en tiempo real en un panel limpio.</div>
+        <div class="mini-stat-row">
+          <div class="mini-stat-line">
+            <span style="width:80px">Pedidos hoy</span>
+            <div class="mini-stat-bar"><div class="mini-stat-fill" style="width:72%"></div></div>
+            <span>72%</span>
+          </div>
+          <div class="mini-stat-line">
+            <span style="width:80px">Conversión</span>
+            <div class="mini-stat-bar"><div class="mini-stat-fill" style="width:58%"></div></div>
+            <span>58%</span>
+          </div>
+          <div class="mini-stat-line">
+            <span style="width:80px">Facturado</span>
+            <div class="mini-stat-bar"><div class="mini-stat-fill" style="width:85%"></div></div>
+            <span>85%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="feature-title">Notificaciones automáticas</div>
+        <div class="feature-desc">Recordatorios de turno, confirmaciones de pedido y alertas de stock bajo — automáticos y sin fricción.</div>
+        <div style="margin-top:14px;background:rgba(99,102,241,0.1);border-radius:8px;padding:10px;display:flex;gap:8px;align-items:center">
+          <span style="font-size:18px">🔔</span>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#fff">Turno mañana 10:00am</div>
+            <div style="font-size:10px;color:var(--muted)">Recordatorio automático enviado</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature-card reveal reveal-delay-3">
+        <div class="feature-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="#6366f1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="#6366f1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="#6366f1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="#6366f1" stroke-width="2"/></svg>
+        </div>
+        <div class="feature-title">Módulos activables</div>
+        <div class="feature-desc">Activá solo lo que necesitás: Pedidos, Turnos, Inventario o Solo consultas. Tu negocio, tu configuración.</div>
+        <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:5px">
+          <span style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--accent-h);font-weight:600">🛒 Pedidos</span>
+          <span style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--accent-h);font-weight:600">📅 Turnos</span>
+          <span style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--muted);font-weight:600">📦 Inventario</span>
+          <span style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--muted);font-weight:600">💬 Consultas</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ INDUSTRIAS ════════════════ -->
+<section class="section" id="industrias" style="background:var(--bg2)">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Industrias</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Para cualquier tipo<br>de negocio.</h2>
+    </div>
+    <div class="industry-grid">
+      <div class="industry-card reveal reveal-delay-1">
+        <div class="industry-emoji">🍕</div>
+        <div>
+          <div class="industry-name">Restaurantes</div>
+          <div class="industry-desc">Pedidos, menú digital y entregas</div>
+        </div>
+      </div>
+      <div class="industry-card reveal reveal-delay-2">
+        <div class="industry-emoji">✂️</div>
+        <div>
+          <div class="industry-name">Peluquerías</div>
+          <div class="industry-desc">Turnos, agenda y recordatorios</div>
+        </div>
+      </div>
+      <div class="industry-card reveal reveal-delay-3">
+        <div class="industry-emoji">🏥</div>
+        <div>
+          <div class="industry-name">Consultorios</div>
+          <div class="industry-desc">Reservas médicas y FAQ automáticas</div>
+        </div>
+      </div>
+      <div class="industry-card reveal reveal-delay-1">
+        <div class="industry-emoji">🛍️</div>
+        <div>
+          <div class="industry-name">Tiendas</div>
+          <div class="industry-desc">Stock, ventas y consultas de productos</div>
+        </div>
+      </div>
+      <div class="industry-card reveal reveal-delay-2">
+        <div class="industry-emoji">🧠</div>
+        <div>
+          <div class="industry-name">Psicólogos</div>
+          <div class="industry-desc">Agenda de sesiones y consultas</div>
+        </div>
+      </div>
+      <div class="industry-card reveal reveal-delay-3">
+        <div class="industry-emoji">🏋️</div>
+        <div>
+          <div class="industry-name">Gimnasios</div>
+          <div class="industry-desc">Clases, turnos y membresías</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ NÚMEROS ANIMADOS ════════════════ -->
+<section class="numbers-section">
+  <div class="container">
+    <div class="text-center reveal" style="margin-bottom:48px">
+      <div class="section-label">Resultados</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Números que hablan<br>por sí solos.</h2>
+    </div>
+    <div class="numbers-grid">
+      <div class="number-card reveal reveal-delay-1">
+        <div class="number-value" data-target="40" data-prefix="+" data-suffix="%" id="num-1">0%</div>
+        <div class="number-label">Más ventas promedio</div>
+      </div>
+      <div class="number-card reveal reveal-delay-2">
+        <div class="number-value" data-target="80" data-prefix="-" data-suffix="%" id="num-2">0%</div>
+        <div class="number-label">Menos errores de pedido</div>
+      </div>
+      <div class="number-card reveal reveal-delay-3">
+        <div class="number-value" id="num-3" data-special="24/7">0</div>
+        <div class="number-label">Activo sin descanso</div>
+      </div>
+      <div class="number-card reveal reveal-delay-4">
+        <div class="number-value" data-target="3" data-suffix=" min" id="num-4">0</div>
+        <div class="number-label">Setup completo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ DEMO ════════════════ -->
+<section class="demo-section" id="demo">
+  <div class="container">
+    <div class="demo-inner">
+      <div class="demo-info reveal">
+        <div class="section-label">Demo en vivo</div>
+        <h2>Probalo ahora.<br>Gratis, sin registro.</h2>
+        <p>Este chat conecta en tiempo real con la API de OrdenBot. Preguntale al bot de Pizzería Roma sobre el menú, hacé un pedido o consultá horarios.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:block;flex-shrink:0"></span>
+            Conectado a la API real — pizzeria-roma
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span style="font-size:15px">🤖</span> Responde con GPT-4o mini
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)">
+            <span style="font-size:15px">💾</span> Los pedidos se guardan en la DB
+          </div>
+        </div>
+      </div>
+      <div class="demo-phone-wrap reveal reveal-delay-2">
+        <div class="demo-phone">
+          <div class="demo-notch"></div>
+          <div class="demo-header">
+            <div class="demo-av">🍕</div>
+            <div>
+              <div class="demo-contact-name">Pizzería Roma</div>
+              <div class="demo-contact-sub">● en línea · OrdenBot</div>
+            </div>
+          </div>
+          <div class="demo-body" id="demo-body">
+            <div class="demo-msg bot">
+              ¡Hola! Soy el asistente de Pizzería Roma 🍕 ¿En qué puedo ayudarte hoy?
+              <div class="dm-time">ahora</div>
+            </div>
+            <div class="demo-typing" id="demo-typing">
+              <div class="demo-dot"></div>
+              <div class="demo-dot"></div>
+              <div class="demo-dot"></div>
+            </div>
+          </div>
+          <div class="demo-input-row">
+            <input class="demo-input" id="demo-input" type="text"
+              placeholder="Escribí tu mensaje…"
+              onkeydown="if(event.key==='Enter') sendDemoMsg()">
+            <button class="demo-send-btn" onclick="sendDemoMsg()">➤</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ PRECIOS ════════════════ -->
+<section class="section" id="precios" style="background:var(--bg2)">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Precios</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Simple. Transparente.<br>Sin sorpresas.</h2>
+      <p class="subheadline" style="margin:14px auto 0">Empezá gratis y escalá cuando lo necesites.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <div class="pricing-card reveal reveal-delay-1">
+        <div class="pricing-plan">Starter</div>
+        <div class="pricing-price"><sup>$</sup>29</div>
+        <div class="pricing-period">por mes · facturado mensualmente</div>
+        <div class="pricing-desc">Ideal para empezar a automatizar tu atención al cliente.</div>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> 1 negocio</li>
+          <li><span class="check">✓</span> Bot de chat + WhatsApp</li>
+          <li><span class="check">✓</span> Módulo de pedidos</li>
+          <li><span class="check">✓</span> Dashboard básico</li>
+          <li><span class="check">✓</span> 500 mensajes/mes</li>
+          <li><span class="cross">—</span> Turnos y agenda</li>
+          <li><span class="cross">—</span> Inventario</li>
+          <li><span class="cross">—</span> Analytics avanzado</li>
+        </ul>
+        <a href="https://chatbot-saas-production-0dae.up.railway.app/app" class="btn btn-ghost pricing-btn">Empezar gratis</a>
+      </div>
+
+      <div class="pricing-card featured reveal reveal-delay-2">
+        <div class="pricing-badge-top">⭐ Más popular</div>
+        <div class="pricing-plan">Pro</div>
+        <div class="pricing-price"><sup>$</sup>49</div>
+        <div class="pricing-period">por mes · facturado mensualmente</div>
+        <div class="pricing-desc">Para negocios que quieren automatización completa y métricas reales.</div>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> 1 negocio</li>
+          <li><span class="check">✓</span> Bot de chat + WhatsApp</li>
+          <li><span class="check">✓</span> Pedidos, Turnos, Inventario</li>
+          <li><span class="check">✓</span> Dashboard completo + Analytics</li>
+          <li><span class="check">✓</span> Mensajes ilimitados</li>
+          <li><span class="check">✓</span> Notificaciones automáticas</li>
+          <li><span class="check">✓</span> Exportar datos</li>
+          <li><span class="check">✓</span> Soporte prioritario</li>
+        </ul>
+        <a href="https://chatbot-saas-production-0dae.up.railway.app/app" class="btn btn-primary pricing-btn">Empezar con Pro</a>
+      </div>
+
+      <div class="pricing-card reveal reveal-delay-3">
+        <div class="pricing-plan">Enterprise</div>
+        <div class="pricing-price" style="font-size:36px;margin-bottom:8px">A medida</div>
+        <div class="pricing-period">contactanos para cotizar</div>
+        <div class="pricing-desc">Para cadenas, franquicias o negocios con necesidades específicas.</div>
+        <div class="pricing-divider"></div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Múltiples sucursales</li>
+          <li><span class="check">✓</span> Integración con tu sistema</li>
+          <li><span class="check">✓</span> Bot personalizado con tu marca</li>
+          <li><span class="check">✓</span> SLA garantizado</li>
+          <li><span class="check">✓</span> Onboarding dedicado</li>
+          <li><span class="check">✓</span> API acceso completo</li>
+          <li><span class="check">✓</span> Reportes custom</li>
+          <li><span class="check">✓</span> Account manager</li>
+        </ul>
+        <a href="mailto:hola@ordenbot.app" class="btn btn-ghost pricing-btn">Contactar ventas</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ TABLA COMPARATIVA ════════════════ -->
+<section class="compare-section">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Comparativa</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">OrdenBot vs.<br>las alternativas.</h2>
+    </div>
+    <div class="compare-wrap reveal reveal-delay-1">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Funcionalidad</th>
+            <th>WhatsApp manual</th>
+            <th>Recepcionista</th>
+            <th>Otras apps</th>
+            <th class="hl">OrdenBot</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Disponibilidad 24/7</td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="check-icon">✓</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Pedidos automáticos</td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="partial">parcial</span></td>
+            <td><span class="partial">parcial</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Gestión de turnos</td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="check-icon">✓</span></td>
+            <td><span class="partial">parcial</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Control de inventario</td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="partial">parcial</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Dashboard de métricas</td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="partial">básico</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Sin apps adicionales</td>
+            <td><span class="check-icon">✓</span></td>
+            <td><span class="check-icon">✓</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Configuración rápida</td>
+            <td><span class="check-icon">✓</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td><span class="cross-icon">✕</span></td>
+            <td class="hl"><span class="check-icon">✓</span></td>
+          </tr>
+          <tr>
+            <td>Costo mensual</td>
+            <td>$0 + tu tiempo</td>
+            <td>+$800/mes</td>
+            <td>$80-200/mes</td>
+            <td class="hl">desde $29/mes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ CTA FINAL ════════════════ -->
+<section class="cta-section">
+  <div class="container">
+    <div class="reveal">
+      <h2 class="headline">¿Listo para automatizar<br>tu negocio?</h2>
+      <p class="subheadline">Configuración en 3 minutos. Sin tarjeta de crédito. Sin contratos.</p>
+      <div class="cta-btns">
+        <a href="https://chatbot-saas-production-0dae.up.railway.app/app" class="btn btn-primary" style="font-size:16px;padding:15px 32px">
+          Empezar gratis ahora →
+        </a>
+        <a href="#demo" class="btn btn-ghost" style="font-size:16px;padding:15px 32px">
+          Ver demo primero
+        </a>
+      </div>
+      <p style="margin-top:20px;font-size:12px;color:var(--muted2)">
+        ✓ Sin tarjeta de crédito &nbsp;·&nbsp; ✓ Cancelás cuando querés &nbsp;·&nbsp; ✓ Soporte en español
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ FOOTER ════════════════ -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <a href="#" class="footer-logo">🤖 OrdenBot</a>
+      <div class="footer-links">
+        <a href="#features">Características</a>
+        <a href="#demo">Demo</a>
+        <a href="#precios">Precios</a>
+        <a href="#industrias">Industrias</a>
+        <a href="mailto:hola@ordenbot.app">Contacto</a>
+      </div>
+      <div class="footer-copy">© OrdenBot 2026. Todos los derechos reservados.</div>
+    </div>
+  </div>
+</footer>
+
+<!-- ════════════════ JS ════════════════ -->
+<script>
+'use strict';
+
+// ── IntersectionObserver para animaciones reveal ─────────────────────────────
+var revealObserver = new IntersectionObserver(function (entries) {
+  entries.forEach(function (entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12 });
+
+document.querySelectorAll('.reveal').forEach(function (el) {
+  revealObserver.observe(el);
+});
+
+// ── Animación de la línea de pasos ───────────────────────────────────────────
+var stepsObserver = new IntersectionObserver(function (entries) {
+  entries.forEach(function (entry) {
+    if (entry.isIntersecting) {
+      var fill = document.getElementById('steps-fill');
+      if (fill) fill.style.width = '100%';
+    }
+  });
+}, { threshold: 0.4 });
+var stepsWrap = document.querySelector('.steps-wrap');
+if (stepsWrap) stepsObserver.observe(stepsWrap);
+
+// ── Números animados ─────────────────────────────────────────────────────────
+function animateNumber(el, target, prefix, suffix, duration) {
+  prefix = prefix || '';
+  suffix = suffix || '';
+  duration = duration || 1800;
+  var start = null;
+  function step(ts) {
+    if (!start) start = ts;
+    var prog = Math.min((ts - start) / duration, 1);
+    var eased = 1 - Math.pow(1 - prog, 3); // ease-out cubic
+    var current = Math.round(eased * target);
+    el.textContent = prefix + current + suffix;
+    if (prog < 1) requestAnimationFrame(step);
+    else el.textContent = prefix + target + suffix;
+  }
+  requestAnimationFrame(step);
+}
+
+var numbersObserver = new IntersectionObserver(function (entries) {
+  entries.forEach(function (entry) {
+    if (!entry.isIntersecting) return;
+    var el = entry.target;
+    if (el.dataset.animated) return;
+    el.dataset.animated = '1';
+    if (el.dataset.special) {
+      // special values like "24/7"
+      setTimeout(function () {
+        el.textContent = el.dataset.special;
+      }, 200);
+    } else {
+      var target = parseInt(el.dataset.target, 10) || 0;
+      var prefix = el.dataset.prefix || '';
+      var suffix = el.dataset.suffix || '';
+      animateNumber(el, target, prefix, suffix, 1800);
+    }
+    numbersObserver.unobserve(el);
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.number-value[data-target], .number-value[data-special]').forEach(function (el) {
+  numbersObserver.observe(el);
+});
+
+// ── Hero chat animado ────────────────────────────────────────────────────────
+var heroMessages = [
+  { role: 'user',  text: 'Hola! Tienen la pizza cuatro quesos?' },
+  { role: 'bot',   text: '¡Sí! 🍕 Cuatro Quesos $1.200. ¿Te la agrego al pedido?' },
+  { role: 'user',  text: 'Dale, una por favor' },
+  { role: 'bot',   text: '✅ Pedido registrado. En 25 minutos está en tu puerta.' },
+  { role: 'user',  text: '¿Puedo pagar con Mercado Pago?' },
+  { role: 'bot',   text: '¡Claro! Aceptamos MP, efectivo y tarjeta. 🎉' },
+];
+
+var heroChat  = document.getElementById('hero-chat');
+var heroTyping = document.getElementById('hero-typing');
+var hIdx = 0;
+
+function addHeroMsg(msg) {
+  var div = document.createElement('div');
+  div.className = 'chat-msg ' + msg.role;
+  var now = new Date();
+  div.innerHTML = msg.text + '<div class="time">' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0') + '</div>';
+  // Insert before typing indicator
+  heroChat.insertBefore(div, heroTyping);
+  setTimeout(function () { div.classList.add('visible'); }, 30);
+  heroChat.scrollTop = heroChat.scrollHeight;
+}
+
+function heroStep() {
+  if (hIdx >= heroMessages.length) {
+    // restart after pause
+    setTimeout(function () {
+      heroChat.querySelectorAll('.chat-msg').forEach(function (m) { m.remove(); });
+      hIdx = 0;
+      heroStep();
+    }, 4000);
+    return;
+  }
+  var msg = heroMessages[hIdx++];
+  if (msg.role === 'bot') {
+    heroTyping.classList.add('visible');
+    heroChat.scrollTop = heroChat.scrollHeight;
+    setTimeout(function () {
+      heroTyping.classList.remove('visible');
+      addHeroMsg(msg);
+      setTimeout(heroStep, 1400 + Math.random() * 600);
+    }, 1200 + Math.random() * 400);
+  } else {
+    addHeroMsg(msg);
+    setTimeout(heroStep, 900 + Math.random() * 400);
+  }
+}
+
+// Start after hero is visible
+setTimeout(heroStep, 1200);
+
+// ── Demo chat con API real ───────────────────────────────────────────────────
+var API_BASE  = 'https://chatbot-saas-production-0dae.up.railway.app';
+var DEMO_BID  = 'pizzeria-roma';
+var demoSid   = 'demo-' + Date.now().toString(36);
+var demoMsgs  = [];
+
+function demoTime() {
+  var d = new Date();
+  return d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function appendDemoMsg(text, role) {
+  var body    = document.getElementById('demo-body');
+  var typing  = document.getElementById('demo-typing');
+  var div     = document.createElement('div');
+  div.className = 'demo-msg ' + role;
+  div.innerHTML = escHtml(text) + '<div class="dm-time">' + demoTime() + '</div>';
+  body.insertBefore(div, typing);
+  body.scrollTop = body.scrollHeight;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showDemoTyping(show) {
+  var t = document.getElementById('demo-typing');
+  if (t) t.style.display = show ? 'flex' : 'none';
+  var body = document.getElementById('demo-body');
+  if (body) body.scrollTop = body.scrollHeight;
+}
+
+window.sendDemoMsg = function () {
+  var input = document.getElementById('demo-input');
+  var text  = (input.value || '').trim();
+  if (!text) return;
+  input.value = '';
+  input.disabled = true;
+
+  appendDemoMsg(text, 'user');
+  demoMsgs.push({ role: 'user', content: text });
+
+  showDemoTyping(true);
+
+  fetch(API_BASE + '/chat?businessId=' + DEMO_BID, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      messages:   demoMsgs,
+      businessId: DEMO_BID,
+      sessionId:  demoSid
+    })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (data) {
+    showDemoTyping(false);
+    var raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    var replyText = raw;
+    try {
+      var parsed = JSON.parse(raw);
+      replyText = parsed.text || raw;
+    } catch (_) {}
+    if (replyText) {
+      appendDemoMsg(replyText, 'bot');
+      demoMsgs.push({ role: 'assistant', content: raw });
+    }
+  })
+  .catch(function () {
+    showDemoTyping(false);
+    appendDemoMsg('Lo siento, hubo un problema de conexión. Intentá de nuevo.', 'bot');
+  })
+  .finally(function () {
+    input.disabled = false;
+    input.focus();
+  });
+};
+</script>
+</body>
+</html>
