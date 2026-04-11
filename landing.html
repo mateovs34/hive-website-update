@@ -88,15 +88,66 @@
   .btn-ghost:hover { background: var(--surface); border-color: var(--border2); }
 
   /* ── Scroll animations ─────────────────────────────────────────────────── */
+  /* Base: slide up + fade (títulos, elementos generales) */
   .reveal {
-    opacity: 0; transform: translateY(32px);
-    transition: opacity .65s ease, transform .65s ease;
+    opacity: 0; transform: translateY(40px);
+    transition: opacity .6s cubic-bezier(0.25,0.46,0.45,0.94),
+                transform .6s cubic-bezier(0.25,0.46,0.45,0.94);
   }
   .reveal.visible { opacity: 1; transform: translateY(0); }
-  .reveal-delay-1 { transition-delay: .1s; }
-  .reveal-delay-2 { transition-delay: .2s; }
-  .reveal-delay-3 { transition-delay: .3s; }
-  .reveal-delay-4 { transition-delay: .4s; }
+
+  /* Slide desde la derecha (mockup celular) */
+  .reveal-right {
+    opacity: 0; transform: translateX(60px);
+    transition: opacity .7s cubic-bezier(0.25,0.46,0.45,0.94),
+                transform .7s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .reveal-right.visible { opacity: 1; transform: translateX(0); }
+
+  /* Scale + fade (iconos de features) */
+  .reveal-scale {
+    opacity: 0; transform: scale(0.8);
+    transition: opacity .5s cubic-bezier(0.25,0.46,0.45,0.94),
+                transform .5s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .reveal-scale.visible { opacity: 1; transform: scale(1); }
+
+  /* Flip 3D suave (cards de industrias) */
+  .reveal-flip {
+    opacity: 0; transform: perspective(700px) rotateY(22deg) translateY(18px);
+    transition: opacity .6s cubic-bezier(0.25,0.46,0.45,0.94),
+                transform .6s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .reveal-flip.visible { opacity: 1; transform: perspective(700px) rotateY(0deg) translateY(0); }
+
+  /* Stagger delays */
+  .reveal-delay-1, [data-delay="1"] { transition-delay: .1s; }
+  .reveal-delay-2, [data-delay="2"] { transition-delay: .2s; }
+  .reveal-delay-3, [data-delay="3"] { transition-delay: .3s; }
+  .reveal-delay-4, [data-delay="4"] { transition-delay: .4s; }
+  .reveal-delay-5, [data-delay="5"] { transition-delay: .5s; }
+  [data-delay="6"] { transition-delay: .6s; }
+
+  /* Icon pop cuando su card parent entra */
+  .feature-card.visible .feature-icon {
+    animation: iconPop .5s cubic-bezier(0.25,0.46,0.45,0.94) .15s both;
+  }
+  @keyframes iconPop {
+    from { transform: scale(0.65); opacity: 0.4; }
+    to   { transform: scale(1);    opacity: 1; }
+  }
+
+  /* Ripple en botones */
+  .btn { position: relative; overflow: hidden; }
+  .ripple-wave {
+    position: absolute; border-radius: 50%;
+    background: rgba(255,255,255,0.22);
+    transform: scale(0); animation: rippleAnim .55s linear forwards;
+    pointer-events: none;
+  }
+  @keyframes rippleAnim {
+    to { transform: scale(4); opacity: 0; }
+  }
 
   /* ── NAV ────────────────────────────────────────────────────────────────── */
   .nav {
@@ -121,9 +172,16 @@
   .nav-links { display: flex; align-items: center; gap: 32px; }
   .nav-links a {
     color: var(--muted); font-size: 14px; font-weight: 500; text-decoration: none;
-    transition: color .2s;
+    transition: color .2s; position: relative;
+  }
+  .nav-links a::after {
+    content: ''; position: absolute; bottom: -3px; left: 0;
+    width: 0; height: 1.5px; background: var(--accent-h);
+    transition: width .28s cubic-bezier(0.25,0.46,0.45,0.94);
+    border-radius: 2px;
   }
   .nav-links a:hover { color: var(--text); }
+  .nav-links a:hover::after { width: 100%; }
   .nav-cta { display: flex; align-items: center; gap: 12px; }
   @media (max-width: 768px) {
     .nav-links { display: none; }
@@ -361,8 +419,10 @@
     display: flex; align-items: center; gap: 16px;
   }
   .industry-card:hover {
-    background: var(--surface2); border-color: rgba(99,102,241,0.35);
-    transform: translateY(-2px);
+    background: var(--surface2);
+    border-color: rgba(99,102,241,0.55);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 0 24px rgba(99,102,241,0.18), 0 8px 28px rgba(0,0,0,0.35);
   }
   .industry-emoji { font-size: 32px; }
   .industry-name { font-size: 16px; font-weight: 700; color: #fff; }
@@ -370,12 +430,29 @@
   @media (max-width: 768px) { .industry-grid { grid-template-columns: repeat(2,1fr); } }
   @media (max-width: 480px) { .industry-grid { grid-template-columns: 1fr; } }
 
+  /* ── PARTÍCULAS fondo números ───────────────────────────────────────────── */
+  .particles-bg {
+    position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0;
+  }
+  .particle {
+    position: absolute; border-radius: 50%;
+    background: rgba(99,102,241,0.35);
+    animation: floatParticle linear infinite;
+  }
+  @keyframes floatParticle {
+    0%   { transform: translateY(0) scale(1);   opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: .6; }
+    100% { transform: translateY(-120px) scale(0.6); opacity: 0; }
+  }
+
   /* ── NÚMEROS ANIMADOS ───────────────────────────────────────────────────── */
   .numbers-section {
     background: linear-gradient(135deg, #0f0f1a 0%, #0a0a0a 100%);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     padding: 90px 0;
+    position: relative;
   }
   .numbers-grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px;
@@ -618,7 +695,7 @@
         </div>
       </div>
 
-      <div class="hero-right reveal reveal-delay-2">
+      <div class="hero-right reveal-right">
         <div class="phone-wrap">
           <div class="phone-glow"></div>
           <div class="phone">
@@ -719,34 +796,34 @@
       <div class="section-label">Proceso</div>
       <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Tan simple como<br>una conversación.</h2>
     </div>
-    <div class="steps-wrap reveal reveal-delay-1">
+    <div class="steps-wrap">
       <div class="steps-line"><div class="steps-line-fill" id="steps-fill"></div></div>
       <div class="steps">
-        <div class="step">
+        <div class="step reveal" data-delay="1">
           <div class="step-num">1</div>
           <div class="step-icon">💬</div>
           <div class="step-title">Cliente escribe</div>
           <div class="step-desc">El cliente manda un mensaje por WhatsApp o el chat del sitio</div>
         </div>
-        <div class="step">
+        <div class="step reveal" data-delay="2">
           <div class="step-num">2</div>
           <div class="step-icon">🤖</div>
           <div class="step-title">Bot responde</div>
           <div class="step-desc">La IA procesa con el contexto completo de tu negocio</div>
         </div>
-        <div class="step">
+        <div class="step reveal" data-delay="3">
           <div class="step-num">3</div>
           <div class="step-icon">✅</div>
           <div class="step-title">Cliente elige</div>
           <div class="step-desc">Selecciona productos, horarios o hace consultas</div>
         </div>
-        <div class="step">
+        <div class="step reveal" data-delay="4">
           <div class="step-num">4</div>
           <div class="step-icon">📩</div>
           <div class="step-title">Confirmación</div>
           <div class="step-desc">Pedido o turno registrado automáticamente en la DB</div>
         </div>
-        <div class="step">
+        <div class="step reveal" data-delay="5">
           <div class="step-num">5</div>
           <div class="step-icon">📊</div>
           <div class="step-title">Vos ves todo</div>
@@ -882,42 +959,42 @@
       <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Para cualquier tipo<br>de negocio.</h2>
     </div>
     <div class="industry-grid">
-      <div class="industry-card reveal reveal-delay-1">
+      <div class="industry-card reveal-flip" data-delay="1">
         <div class="industry-emoji">🍕</div>
         <div>
           <div class="industry-name">Restaurantes</div>
           <div class="industry-desc">Pedidos, menú digital y entregas</div>
         </div>
       </div>
-      <div class="industry-card reveal reveal-delay-2">
+      <div class="industry-card reveal-flip" data-delay="2">
         <div class="industry-emoji">✂️</div>
         <div>
           <div class="industry-name">Peluquerías</div>
           <div class="industry-desc">Turnos, agenda y recordatorios</div>
         </div>
       </div>
-      <div class="industry-card reveal reveal-delay-3">
+      <div class="industry-card reveal-flip" data-delay="3">
         <div class="industry-emoji">🏥</div>
         <div>
           <div class="industry-name">Consultorios</div>
           <div class="industry-desc">Reservas médicas y FAQ automáticas</div>
         </div>
       </div>
-      <div class="industry-card reveal reveal-delay-1">
+      <div class="industry-card reveal-flip" data-delay="4">
         <div class="industry-emoji">🛍️</div>
         <div>
           <div class="industry-name">Tiendas</div>
           <div class="industry-desc">Stock, ventas y consultas de productos</div>
         </div>
       </div>
-      <div class="industry-card reveal reveal-delay-2">
+      <div class="industry-card reveal-flip" data-delay="5">
         <div class="industry-emoji">🧠</div>
         <div>
           <div class="industry-name">Psicólogos</div>
           <div class="industry-desc">Agenda de sesiones y consultas</div>
         </div>
       </div>
-      <div class="industry-card reveal reveal-delay-3">
+      <div class="industry-card reveal-flip" data-delay="6">
         <div class="industry-emoji">🏋️</div>
         <div>
           <div class="industry-name">Gimnasios</div>
@@ -930,7 +1007,8 @@
 
 <!-- ════════════════ NÚMEROS ANIMADOS ════════════════ -->
 <section class="numbers-section">
-  <div class="container">
+  <div class="particles-bg" id="particles-bg"></div>
+  <div class="container" style="position:relative;z-index:1">
     <div class="text-center reveal" style="margin-bottom:48px">
       <div class="section-label">Resultados</div>
       <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Números que hablan<br>por sí solos.</h2>
@@ -1219,9 +1297,9 @@ var revealObserver = new IntersectionObserver(function (entries) {
       revealObserver.unobserve(entry.target);
     }
   });
-}, { threshold: 0.12 });
+}, { threshold: 0.1 });
 
-document.querySelectorAll('.reveal').forEach(function (el) {
+document.querySelectorAll('.reveal, .reveal-right, .reveal-scale, .reveal-flip').forEach(function (el) {
   revealObserver.observe(el);
 });
 
@@ -1231,11 +1309,13 @@ var stepsObserver = new IntersectionObserver(function (entries) {
     if (entry.isIntersecting) {
       var fill = document.getElementById('steps-fill');
       if (fill) fill.style.width = '100%';
+      stepsObserver.disconnect();
     }
   });
-}, { threshold: 0.4 });
-var stepsWrap = document.querySelector('.steps-wrap');
-if (stepsWrap) stepsObserver.observe(stepsWrap);
+}, { threshold: 0.3 });
+// Observe first step — once visible, trigger the line fill
+var firstStep = document.querySelector('.step.reveal');
+if (firstStep) stepsObserver.observe(firstStep);
 
 // ── Números animados ─────────────────────────────────────────────────────────
 function animateNumber(el, target, prefix, suffix, duration) {
@@ -1332,6 +1412,60 @@ function heroStep() {
 
 // Start after hero is visible
 setTimeout(heroStep, 1200);
+
+// ── Parallax suave en el celular del hero ────────────────────────────────────
+(function () {
+  var phoneWrap = document.querySelector('.hero-right .phone-wrap');
+  if (!phoneWrap) return;
+  var ticking = false;
+  window.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var y = window.scrollY;
+      phoneWrap.style.transform = 'translateY(' + (y * 0.12) + 'px)';
+      ticking = false;
+    });
+  }, { passive: true });
+})();
+
+// ── Ripple effect en botones ─────────────────────────────────────────────────
+document.querySelectorAll('.btn').forEach(function (btn) {
+  btn.addEventListener('click', function (e) {
+    var r = document.createElement('span');
+    r.className = 'ripple-wave';
+    var size = Math.max(btn.offsetWidth, btn.offsetHeight);
+    var rect = btn.getBoundingClientRect();
+    r.style.cssText = 'width:' + size + 'px;height:' + size + 'px;'
+      + 'left:' + (e.clientX - rect.left - size / 2) + 'px;'
+      + 'top:' + (e.clientY - rect.top - size / 2) + 'px;';
+    btn.appendChild(r);
+    setTimeout(function () { if (r.parentNode) r.parentNode.removeChild(r); }, 600);
+  });
+});
+
+// ── Partículas flotantes en sección de números ───────────────────────────────
+(function () {
+  var container = document.getElementById('particles-bg');
+  if (!container) return;
+  var count = 22;
+  for (var i = 0; i < count; i++) {
+    (function () {
+      var p = document.createElement('div');
+      p.className = 'particle';
+      var size = (Math.random() * 4 + 2) + 'px';
+      var left = (Math.random() * 100) + '%';
+      var top  = (Math.random() * 100) + '%';
+      var dur  = (Math.random() * 8 + 6) + 's';
+      var del  = (Math.random() * 6) + 's';
+      p.style.cssText = 'width:' + size + ';height:' + size
+        + ';left:' + left + ';top:' + top
+        + ';animation-duration:' + dur
+        + ';animation-delay:' + del + ';';
+      container.appendChild(p);
+    })();
+  }
+})();
 
 // ── Demo chat con API real ───────────────────────────────────────────────────
 var API_BASE  = 'https://chatbot-saas-production-0dae.up.railway.app';
