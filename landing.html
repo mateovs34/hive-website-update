@@ -617,6 +617,72 @@
   .cross-icon { color: var(--muted2); font-size: 17px; }
   .partial { color: var(--accent-h); font-size: 12px; }
 
+  /* ── TESTIMONIOS ────────────────────────────────────────────────────────── */
+  .testimonios-section { padding: 100px 0; background: var(--bg); }
+  .testimonios-grid {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 22px; margin-top: 48px;
+  }
+  .testi-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 32px 28px;
+    display: flex; flex-direction: column; gap: 18px;
+    transition: border-color .25s, box-shadow .25s;
+  }
+  .testi-card:hover {
+    border-color: rgba(99,102,241,0.35);
+    box-shadow: 0 0 20px rgba(99,102,241,0.1), 0 8px 28px rgba(0,0,0,0.3);
+  }
+  .testi-stars { color: #f59e0b; font-size: 16px; letter-spacing: 2px; }
+  .testi-text {
+    font-size: 15px; color: var(--text); line-height: 1.7;
+    font-style: italic; flex: 1;
+  }
+  .testi-text::before { content: '"'; color: var(--accent-h); font-size: 22px; font-style: normal; }
+  .testi-text::after  { content: '"'; color: var(--accent-h); font-size: 22px; font-style: normal; }
+  .testi-author { display: flex; align-items: center; gap: 14px; }
+  .testi-avatar {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #fff; flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+  }
+  .testi-name { font-size: 14px; font-weight: 700; color: #fff; }
+  .testi-biz  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  @media (max-width: 900px) { .testimonios-grid { grid-template-columns: 1fr; } }
+
+  /* ── FAQ ────────────────────────────────────────────────────────────────── */
+  .faq-section { padding: 100px 0; background: var(--bg2); }
+  .faq-list { margin-top: 48px; display: flex; flex-direction: column; gap: 10px; max-width: 780px; margin-left: auto; margin-right: auto; }
+  .faq-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+    transition: border-color .25s;
+  }
+  .faq-item.open { border-color: rgba(99,102,241,0.35); }
+  .faq-question {
+    width: 100%; background: none; border: none; padding: 20px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    cursor: pointer; text-align: left; font-family: 'Inter', sans-serif;
+  }
+  .faq-question-text { font-size: 15px; font-weight: 600; color: #fff; }
+  .faq-chevron {
+    width: 22px; height: 22px; flex-shrink: 0;
+    border-radius: 50%; background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent-h); font-size: 12px;
+    transition: transform .3s cubic-bezier(0.25,0.46,0.45,0.94), background .2s;
+  }
+  .faq-item.open .faq-chevron { transform: rotate(180deg); background: rgba(99,102,241,0.15); }
+  .faq-answer {
+    max-height: 0; overflow: hidden;
+    transition: max-height .4s cubic-bezier(0.25,0.46,0.45,0.94),
+                padding .3s cubic-bezier(0.25,0.46,0.45,0.94);
+    padding: 0 24px;
+  }
+  .faq-item.open .faq-answer { max-height: 200px; padding: 0 24px 20px; }
+  .faq-answer p { font-size: 14px; color: var(--muted); line-height: 1.7; }
+
   /* ── CTA FINAL ──────────────────────────────────────────────────────────── */
   .cta-section {
     padding: 120px 0;
@@ -664,6 +730,8 @@
       <a href="#demo">Demo</a>
       <a href="#precios">Precios</a>
       <a href="#industrias">Industrias</a>
+      <a href="#testimonios">Testimonios</a>
+      <a href="#faq">FAQ</a>
     </div>
     <div class="nav-cta">
       <a href="#precios" class="btn btn-ghost" style="padding:10px 18px;font-size:14px">Ver planes</a>
@@ -1247,6 +1315,138 @@
 
 <div class="sep"></div>
 
+<!-- ════════════════ TESTIMONIOS ════════════════ -->
+<section class="testimonios-section" id="testimonios">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">Testimonios</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Lo que dicen<br>nuestros clientes.</h2>
+    </div>
+    <div class="testimonios-grid">
+
+      <div class="testi-card reveal reveal-delay-1">
+        <div class="testi-stars">⭐⭐⭐⭐⭐</div>
+        <div class="testi-text">
+          Implementamos el bot en nuestra pizzería y los pedidos por WhatsApp subieron un 60%. El dashboard en tiempo real cambió cómo gestionamos el negocio.
+        </div>
+        <div class="testi-author">
+          <div class="testi-avatar">MR</div>
+          <div>
+            <div class="testi-name">Martín R.</div>
+            <div class="testi-biz">Pizzería El Hornero · Buenos Aires</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testi-card reveal reveal-delay-2">
+        <div class="testi-stars">⭐⭐⭐⭐⭐</div>
+        <div class="testi-text">
+          Antes perdíamos turnos porque nadie atendía el teléfono a las 9pm. Ahora el bot los toma solo y nos llega la notificación.
+        </div>
+        <div class="testi-author">
+          <div class="testi-avatar">DM</div>
+          <div>
+            <div class="testi-name">Daniela M.</div>
+            <div class="testi-biz">Centro de Estética Lumina · Madrid</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="testi-card reveal reveal-delay-3">
+        <div class="testi-stars">⭐⭐⭐⭐⭐</div>
+        <div class="testi-text">
+          Lo mejor es el bot de consultas — le pregunto cuánto vendí esta semana desde WhatsApp y me responde al instante.
+        </div>
+        <div class="testi-author">
+          <div class="testi-avatar">CV</div>
+          <div>
+            <div class="testi-name">Carlos V.</div>
+            <div class="testi-biz">Tech Store Palermo · CABA</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
+<!-- ════════════════ FAQ ════════════════ -->
+<section class="faq-section" id="faq">
+  <div class="container">
+    <div class="text-center reveal">
+      <div class="section-label">FAQ</div>
+      <h2 class="headline" style="font-size:clamp(28px,4vw,48px)">Preguntas<br>frecuentes.</h2>
+    </div>
+    <div class="faq-list">
+
+      <div class="faq-item reveal reveal-delay-1">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Necesito saber programar para configurarlo?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>No, la configuración es 100% visual desde el panel de control. En menos de 3 minutos tu bot está funcionando sin escribir una línea de código.</p>
+        </div>
+      </div>
+
+      <div class="faq-item reveal reveal-delay-2">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Funciona con cualquier tipo de negocio?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sí, tiene módulos activables: Pedidos, Turnos, Inventario o Solo consultas. Cada negocio activa solo lo que necesita.</p>
+        </div>
+      </div>
+
+      <div class="faq-item reveal reveal-delay-3">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Qué pasa si el cliente no tiene WhatsApp?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>También tiene widget para web que se instala en cualquier página con una sola línea de código. Funciona en paralelo con el canal de WhatsApp.</p>
+        </div>
+      </div>
+
+      <div class="faq-item reveal reveal-delay-4">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Puedo probarlo antes de pagar?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>Sí, tenés 14 días gratis sin necesidad de tarjeta de crédito. Acceso completo a todas las funciones del plan Pro durante el trial.</p>
+        </div>
+      </div>
+
+      <div class="faq-item reveal reveal-delay-5">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Cómo recibo los pedidos?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>En tiempo real en el dashboard web y por notificación en tu WhatsApp. También podés ver el historial completo con filtros por fecha, producto y cliente.</p>
+        </div>
+      </div>
+
+      <div class="faq-item reveal" data-delay="6">
+        <button class="faq-question" onclick="toggleFaq(this)">
+          <span class="faq-question-text">¿Qué pasa si tengo problemas?</span>
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer">
+          <p>Soporte por WhatsApp con respuesta en menos de 24hs. Para clientes Pro, el tiempo de respuesta es de menos de 6hs en horario comercial.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="sep"></div>
+
 <!-- ════════════════ CTA FINAL ════════════════ -->
 <section class="cta-section">
   <div class="container">
@@ -1359,6 +1559,18 @@ var numbersObserver = new IntersectionObserver(function (entries) {
 document.querySelectorAll('.number-value[data-target], .number-value[data-special]').forEach(function (el) {
   numbersObserver.observe(el);
 });
+
+// ── FAQ acordeón ────────────────────────────────────────────────────────────
+window.toggleFaq = function (btn) {
+  var item = btn.closest('.faq-item');
+  var isOpen = item.classList.contains('open');
+  // Cerrar todos los abiertos
+  document.querySelectorAll('.faq-item.open').forEach(function (el) {
+    el.classList.remove('open');
+  });
+  // Abrir el clickeado si estaba cerrado
+  if (!isOpen) item.classList.add('open');
+};
 
 // ── Hero chat animado ────────────────────────────────────────────────────────
 var heroMessages = [
