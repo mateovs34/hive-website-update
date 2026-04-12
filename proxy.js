@@ -24,7 +24,8 @@ const crypto   = require('crypto');
 const { Pool } = require('pg');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
-const { Resend } = require('resend');
+const { Resend }  = require('resend');
+const FormData    = require('form-data');
 
 const PORT           = process.env.PORT           || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -1532,13 +1533,105 @@ async function handleResetPassword(res, raw) {
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
+// ── Whisper: descarga y transcripción de notas de voz ────────────────────────
+
+function downloadAudioFromTwilio(mediaUrl) {
+  return new Promise(function (resolve, reject) {
+    var urlObj  = new URL(mediaUrl);
+    var options = {
+      hostname: urlObj.hostname,
+      path:     urlObj.pathname + urlObj.search,
+      method:   'GET',
+      headers:  {
+        'Authorization': 'Basic ' + Buffer.from(
+          TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN
+        ).toString('base64')
+      }
+    };
+    var request = https.request(options, function (response) {
+      // Seguir redirecciones (Twilio usa 301/302 para media)
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        return downloadAudioFromTwilio(response.headers.location).then(resolve).catch(reject);
+      }
+      if (response.statusCode !== 200) {
+        return reject(new Error('Twilio media HTTP ' + response.statusCode));
+      }
+      var chunks = [];
+      response.on('data', function (c) { chunks.push(c); });
+      response.on('end',  function ()  { resolve({ buffer: Buffer.concat(chunks), contentType: response.headers['content-type'] || 'audio/ogg' }); });
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+async function transcribeAudio(mediaUrl, mediaContentType) {
+  console.log('[Whisper] descargando audio desde Twilio:', mediaUrl);
+  var { buffer, contentType } = await downloadAudioFromTwilio(mediaUrl);
+  console.log('[Whisper] audio descargado, tamaño:', buffer.length, 'bytes, tipo:', contentType);
+
+  // Determinar extensión según content-type para que Whisper lo acepte
+  var ext = 'ogg';
+  if (mediaContentType) {
+    if (mediaContentType.includes('mp4') || mediaContentType.includes('mpeg')) ext = 'mp4';
+    else if (mediaContentType.includes('webm'))  ext = 'webm';
+    else if (mediaContentType.includes('mp3'))   ext = 'mp3';
+    else if (mediaContentType.includes('wav'))   ext = 'wav';
+    else if (mediaContentType.includes('m4a'))   ext = 'm4a';
+  }
+
+  var form = new FormData();
+  form.append('file', buffer, { filename: 'voice.' + ext, contentType: mediaContentType || 'audio/ogg' });
+  form.append('model', 'whisper-1');
+  form.append('language', 'es');
+
+  return new Promise(function (resolve, reject) {
+    var formHeaders = form.getHeaders();
+    var body        = form.getBuffer();
+    var options     = {
+      hostname: 'api.openai.com',
+      path:     '/v1/audio/transcriptions',
+      method:   'POST',
+      headers:  Object.assign({}, formHeaders, {
+        'Authorization': 'Bearer ' + OPENAI_API_KEY,
+        'Content-Length': body.length
+      })
+    };
+    var request = https.request(options, function (response) {
+      var chunks = [];
+      response.on('data', function (c) { chunks.push(c); });
+      response.on('end', function () {
+        var raw = Buffer.concat(chunks).toString('utf8');
+        try {
+          var parsed = JSON.parse(raw);
+          if (parsed.text) {
+            console.log('[Whisper] transcripción:', parsed.text);
+            resolve(parsed.text.trim());
+          } else {
+            reject(new Error('Whisper sin texto: ' + raw));
+          }
+        } catch (e) {
+          reject(new Error('Whisper respuesta inválida: ' + raw));
+        }
+      });
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.write(body);
+    request.end();
+  });
+}
+
 // ── WhatsApp webhook ──────────────────────────────────────────────────────────
 
 async function handleWhatsAppWebhook(req, res) {
-  var raw    = await readBody(req);
-  var params = new URLSearchParams(raw);
-  var from   = params.get('From') || '';   // whatsapp:+549...
-  var body   = params.get('Body') || '';
+  var raw              = await readBody(req);
+  var params           = new URLSearchParams(raw);
+  var from             = params.get('From') || '';   // whatsapp:+549...
+  var body             = params.get('Body') || '';
+  var mediaUrl         = params.get('MediaUrl0') || '';
+  var mediaContentType = params.get('MediaContentType0') || '';
 
   function twimlReply(text) {
     var safe = text
@@ -1548,6 +1641,18 @@ async function handleWhatsAppWebhook(req, res) {
     var xml = '<?xml version="1.0" encoding="UTF-8"?><Response><Message>' + safe + '</Message></Response>';
     res.writeHead(200, { 'Content-Type': 'text/xml' });
     res.end(xml);
+  }
+
+  // ── Nota de voz: transcribir con Whisper antes de continuar ──────────────
+  var isAudio = mediaUrl && mediaContentType.startsWith('audio/');
+  if (isAudio) {
+    console.log('[Whisper] nota de voz detectada, tipo:', mediaContentType);
+    try {
+      body = await transcribeAudio(mediaUrl, mediaContentType);
+    } catch (e) {
+      console.error('[Whisper] error al transcribir:', e.message);
+      return twimlReply('Lo siento, no pude entender la nota de voz. ¿Podés escribirme el mensaje?');
+    }
   }
 
   if (!from || !body.trim()) {
