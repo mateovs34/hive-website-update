@@ -1680,29 +1680,82 @@ async function handleWhatsAppWebhook(req, res) {
     try {
       // Consultas en paralelo para minimizar latencia
       var results = await Promise.all([
-        // Métricas de conteo
+        // [0] Métricas de conteo
         pool.query(`
           SELECT
-            COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE)        AS pedidos_hoy,
-            COUNT(*) FILTER (WHERE estado = 'pendiente')                  AS pendientes,
-            COUNT(*) FILTER (WHERE estado = 'confirmado')                 AS confirmados,
-            COUNT(*) FILTER (WHERE estado = 'cancelado')                  AS cancelados,
+            COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE)         AS pedidos_hoy,
+            COUNT(*) FILTER (WHERE estado = 'pendiente')                   AS pendientes,
+            COUNT(*) FILTER (WHERE estado = 'confirmado')                  AS confirmados,
+            COUNT(*) FILTER (WHERE estado = 'cancelado')                   AS cancelados,
             COUNT(*) FILTER (WHERE creado_en >= NOW() - INTERVAL '1 hour') AS ultima_hora,
-            COUNT(*)                                                       AS total_historico
+            COUNT(*)                                                        AS total_historico
           FROM pedidos WHERE business_id = $1
         `, [businessId]),
 
-        // Últimos 10 pedidos con detalle completo
+        // [1] Últimos 200 pedidos para análisis JS completo
         pool.query(`
           SELECT detalles, estado, creado_en
           FROM pedidos
           WHERE business_id = $1
-          ORDER BY creado_en DESC LIMIT 10
+          ORDER BY creado_en DESC LIMIT 200
+        `, [businessId]),
+
+        // [2] Ventas por semana (últimas 4 semanas)
+        pool.query(`
+          SELECT
+            TO_CHAR(DATE_TRUNC('week', creado_en), 'YYYY-MM-DD') AS semana_inicio,
+            COUNT(*)                                               AS total,
+            COUNT(*) FILTER (WHERE estado IN ('confirmado','entregado')) AS confirmados
+          FROM pedidos
+          WHERE business_id = $1
+            AND creado_en >= NOW() - INTERVAL '28 days'
+          GROUP BY DATE_TRUNC('week', creado_en)
+          ORDER BY DATE_TRUNC('week', creado_en) DESC
+        `, [businessId]),
+
+        // [3] Ventas por mes (últimos 3 meses)
+        pool.query(`
+          SELECT
+            TO_CHAR(DATE_TRUNC('month', creado_en), 'YYYY-MM') AS mes,
+            COUNT(*)                                             AS total,
+            COUNT(*) FILTER (WHERE estado IN ('confirmado','entregado')) AS confirmados
+          FROM pedidos
+          WHERE business_id = $1
+            AND creado_en >= NOW() - INTERVAL '3 months'
+          GROUP BY DATE_TRUNC('month', creado_en)
+          ORDER BY DATE_TRUNC('month', creado_en) DESC
+        `, [businessId]),
+
+        // [4] Pedidos por día de la semana (histórico)
+        pool.query(`
+          SELECT
+            EXTRACT(DOW FROM creado_en)::int AS dia,
+            COUNT(*)                          AS total
+          FROM pedidos
+          WHERE business_id = $1
+          GROUP BY dia
+          ORDER BY total DESC
+        `, [businessId]),
+
+        // [5] Hora pico (top 5)
+        pool.query(`
+          SELECT
+            EXTRACT(HOUR FROM creado_en)::int AS hora,
+            COUNT(*)                           AS total
+          FROM pedidos
+          WHERE business_id = $1
+          GROUP BY hora
+          ORDER BY total DESC
+          LIMIT 5
         `, [businessId])
       ]);
 
-      var counts  = results[0].rows[0];
-      var ultRows = results[1].rows;
+      var counts   = results[0].rows[0];
+      var ultRows  = results[1].rows;
+      var semanas  = results[2].rows;
+      var meses    = results[3].rows;
+      var porDia   = results[4].rows;
+      var porHora  = results[5].rows;
 
       // Parsear detalles de cada pedido
       var ultimos = ultRows.map(function (r) {
@@ -1717,31 +1770,41 @@ async function handleWhatsAppWebhook(req, res) {
         return isNaN(n) ? 0 : n;
       }
 
-      var ahora        = new Date();
-      var inicioHoy    = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-      var hace1hora    = new Date(ahora.getTime() - 60 * 60 * 1000);
+      var ahora     = new Date();
+      var inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+      var hace1hora = new Date(ahora.getTime() - 60 * 60 * 1000);
 
-      // Facturación solo de pedidos confirmados
-      var facturadoHoy = 0;
-      var facturadoTotal = 0;
-      var facturadoUltimaHora = 0;
-      var pedidosHoyArr = [];
-
-      // Para poder responder "qué se vendió más", contar items
-      var itemConteo = {};
+      // Facturación por período (JS, usando los 200 registros extendidos)
+      var facturadoHoy         = 0;
+      var facturadoTotal       = 0;
+      var facturadoUltimaHora  = 0;
+      var facturadoPorSemana   = {};   // clave: "YYYY-Www"
+      var facturadoPorMes      = {};   // clave: "YYYY-MM"
+      var itemConteo           = {};
 
       ultimos.forEach(function (p) {
         var monto = parseMonto(p.detalles.total);
         var fecha = new Date(p.creado_en);
-        if (p.estado === 'confirmado') {
+        var confirmado = p.estado === 'confirmado' || p.estado === 'entregado';
+
+        if (confirmado) {
           facturadoTotal += monto;
-          if (fecha >= inicioHoy) {
-            facturadoHoy += monto;
-            pedidosHoyArr.push(p);
-          }
-          if (fecha >= hace1hora) facturadoUltimaHora += monto;
+          if (fecha >= inicioHoy)  { facturadoHoy        += monto; }
+          if (fecha >= hace1hora)  { facturadoUltimaHora += monto; }
+
+          // Agrupar por semana ISO (lunes) — clave YYYY-MM-DD del lunes de esa semana
+          var diaSemana = fecha.getDay();                         // 0=Dom
+          var diffLunes = (diaSemana === 0 ? -6 : 1 - diaSemana);
+          var lunes     = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate() + diffLunes);
+          var clvSem    = lunes.toISOString().slice(0, 10);
+          facturadoPorSemana[clvSem] = (facturadoPorSemana[clvSem] || 0) + monto;
+
+          // Agrupar por mes
+          var clvMes = fecha.getFullYear() + '-' + String(fecha.getMonth() + 1).padStart(2, '0');
+          facturadoPorMes[clvMes] = (facturadoPorMes[clvMes] || 0) + monto;
         }
-        // Conteo de items (todos los estados para responder "qué se pidió más")
+
+        // Conteo de items (todos los estados)
         if (Array.isArray(p.detalles.items)) {
           p.detalles.items.forEach(function (it) {
             var nombre = it.nombre || it.name || '?';
@@ -1754,7 +1817,7 @@ async function handleWhatsAppWebhook(req, res) {
         ? (facturadoTotal / parseInt(counts.confirmados)).toFixed(2)
         : 0;
 
-      // Top 5 productos más pedidos
+      // Top 5 productos más pedidos (histórico de 200)
       var topItems = Object.entries(itemConteo)
         .sort(function (a, b) { return b[1] - a[1]; })
         .slice(0, 5)
@@ -1762,8 +1825,8 @@ async function handleWhatsAppWebhook(req, res) {
         .join('\n') || '  (sin datos)';
 
       // Detalle de los últimos 10 pedidos
-      var ultimosText = ultimos.length
-        ? ultimos.map(function (p) {
+      var ultimosText = ultimos.slice(0, 10).length
+        ? ultimos.slice(0, 10).map(function (p) {
             var items = Array.isArray(p.detalles.items)
               ? p.detalles.items.map(function (i) {
                   return (i.cantidad ? 'x' + i.cantidad + ' ' : '') + (i.nombre || i.name || '?');
@@ -1775,6 +1838,38 @@ async function handleWhatsAppWebhook(req, res) {
             return '  • [' + p.estado + '] ' + items + ' | Total: ' + total + ' | ' + fecha + ' ' + hora;
           }).join('\n')
         : '  (sin pedidos aún)';
+
+      // Ventas por semana (texto)
+      var DIAS_NOMBRE = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+      var semanasText = semanas.length
+        ? semanas.map(function (s) {
+            var fact = facturadoPorSemana[s.semana_inicio] || 0;
+            return '  • Semana ' + s.semana_inicio + ': ' + s.total + ' pedidos (' + s.confirmados + ' conf.) | Facturado: $' + fact.toFixed(2);
+          }).join('\n')
+        : '  (sin datos de últimas 4 semanas)';
+
+      // Ventas por mes (texto)
+      var mesesText = meses.length
+        ? meses.map(function (m) {
+            var fact = facturadoPorMes[m.mes] || 0;
+            return '  • ' + m.mes + ': ' + m.total + ' pedidos (' + m.confirmados + ' conf.) | Facturado: $' + fact.toFixed(2);
+          }).join('\n')
+        : '  (sin datos de últimos 3 meses)';
+
+      // Día de la semana con más pedidos
+      var diasText = porDia.length
+        ? porDia.map(function (d) {
+            return '  • ' + (DIAS_NOMBRE[d.dia] || 'Día ' + d.dia) + ': ' + d.total + ' pedidos';
+          }).join('\n')
+        : '  (sin datos)';
+
+      // Hora pico
+      var horasText = porHora.length
+        ? porHora.map(function (h) {
+            return '  • ' + String(h.hora).padStart(2, '0') + ':00 hs: ' + h.total + ' pedidos';
+          }).join('\n')
+        : '  (sin datos)';
 
       // Menú completo
       var menu = [];
@@ -1804,20 +1899,32 @@ async function handleWhatsAppWebhook(req, res) {
         '\n' +
 
         '══ MÉTRICAS DE HOY ══\n' +
-        'Pedidos hoy: '          + counts.pedidos_hoy  + '\n' +
-        'Pendientes: '           + counts.pendientes   + '\n' +
-        'Confirmados: '          + counts.confirmados  + '\n' +
-        'Cancelados: '           + counts.cancelados   + '\n' +
-        'Última hora: '          + counts.ultima_hora  + ' pedidos\n' +
+        'Pedidos hoy: '            + counts.pedidos_hoy  + '\n' +
+        'Pendientes: '             + counts.pendientes   + '\n' +
+        'Confirmados: '            + counts.confirmados  + '\n' +
+        'Cancelados: '             + counts.cancelados   + '\n' +
+        'Última hora: '            + counts.ultima_hora  + ' pedidos\n' +
         'Facturado hoy (conf.): $' + facturadoHoy.toFixed(2) + '\n' +
         'Facturado última hora: $' + facturadoUltimaHora.toFixed(2) + '\n' +
         '\n' +
 
         '══ HISTÓRICO TOTAL ══\n' +
-        'Total pedidos: '        + counts.total_historico + '\n' +
-        'Total facturado (conf.): $' + facturadoTotal.toFixed(2) + '\n' +
-        'Ticket promedio: $'     + ticketPromedio + '\n' +
+        'Total pedidos: '              + counts.total_historico + '\n' +
+        'Total facturado (conf.): $'   + facturadoTotal.toFixed(2) + '\n' +
+        'Ticket promedio: $'           + ticketPromedio + '\n' +
         '\n' +
+
+        '══ VENTAS POR SEMANA (últimas 4) ══\n' +
+        semanasText + '\n\n' +
+
+        '══ VENTAS POR MES (últimos 3) ══\n' +
+        mesesText + '\n\n' +
+
+        '══ DÍA DE LA SEMANA (histórico, de mayor a menor) ══\n' +
+        diasText + '\n\n' +
+
+        '══ HORA PICO (top 5) ══\n' +
+        horasText + '\n\n' +
 
         '══ PRODUCTOS MÁS PEDIDOS (histórico) ══\n' +
         topItems + '\n\n' +
