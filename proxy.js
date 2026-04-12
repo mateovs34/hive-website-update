@@ -874,11 +874,11 @@ async function handlePutConfig(businessId, res, raw) {
          email_contacto, whatsapp, welcome_msg, bot_nombre, bot_avatar,
          color_widget, turnos_activos, turno_servicio, modulos_activos, actualizado_en)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'), NOW())
+        ($1, $2, $3, COALESCE($4, '[]'), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'), NOW())
       ON CONFLICT (business_id) DO UPDATE SET
         nombre          = EXCLUDED.nombre,
         descripcion     = EXCLUDED.descripcion,
-        menu            = EXCLUDED.menu,
+        menu            = CASE WHEN $4 IS NOT NULL THEN EXCLUDED.menu ELSE negocios.menu END,
         horarios        = EXCLUDED.horarios,
         direccion       = EXCLUDED.direccion,
         telefono        = EXCLUDED.telefono,
@@ -896,7 +896,7 @@ async function handlePutConfig(businessId, res, raw) {
       businessId,
       String(body.nombre         || 'Mi Negocio').slice(0, 100),
       String(body.descripcion    || '').slice(0, 5000),
-      JSON.stringify(Array.isArray(body.menu) ? body.menu : []),
+      body.menu !== undefined ? JSON.stringify(Array.isArray(body.menu) ? body.menu : []) : null,
       String(body.horarios       || '').slice(0, 200),
       String(body.direccion      || '').slice(0, 200),
       String(body.telefono       || '').slice(0, 50),
