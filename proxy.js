@@ -35,7 +35,9 @@ const ADMIN_PASSWORD       = process.env.ADMIN_PASSWORD       || null;
 const TWILIO_ACCOUNT_SID   = process.env.TWILIO_ACCOUNT_SID   || null;
 const TWILIO_AUTH_TOKEN    = process.env.TWILIO_AUTH_TOKEN    || null;
 const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
-const RESEND_API_KEY       = process.env.RESEND_API_KEY       || null;
+const RESEND_API_KEY           = process.env.RESEND_API_KEY           || null;
+const INSTAGRAM_VERIFY_TOKEN   = process.env.INSTAGRAM_VERIFY_TOKEN   || null;
+const INSTAGRAM_ACCESS_TOKEN   = process.env.INSTAGRAM_ACCESS_TOKEN   || null;
 const APP_URL              = process.env.APP_URL || 'https://chatbot-saas-production-0dae.up.railway.app';
 
 const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
@@ -211,6 +213,10 @@ async function initSchema() {
 
   // Módulos activos por negocio
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS modulos_activos TEXT NOT NULL DEFAULT '["pedidos"]'`);
+
+  // Instagram DM integration
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS instagram_access_token TEXT`);
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS instagram_sender_id TEXT`);
 
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
@@ -868,30 +874,36 @@ async function handlePutConfig(businessId, res, raw) {
   try {
     var modulosArr = Array.isArray(body.modulos_activos) ? body.modulos_activos : null;
     var modulosJson = modulosArr ? JSON.stringify(modulosArr) : null;
+    var igToken     = body.instagram_access_token !== undefined ? (String(body.instagram_access_token || '').slice(0, 500) || null) : undefined;
+    var igSender    = body.instagram_sender_id    !== undefined ? (String(body.instagram_sender_id    || '').slice(0, 100) || null) : undefined;
     await pool.query(`
       INSERT INTO negocios
         (business_id, nombre, descripcion, menu, horarios, direccion, telefono,
          email_contacto, whatsapp, welcome_msg, bot_nombre, bot_avatar,
-         color_widget, turnos_activos, turno_servicio, modulos_activos, actualizado_en)
+         color_widget, turnos_activos, turno_servicio, modulos_activos,
+         instagram_access_token, instagram_sender_id, actualizado_en)
       VALUES
-        ($1, $2, $3, COALESCE($4, '[]'), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'), NOW())
+        ($1, $2, $3, COALESCE($4, '[]'), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'),
+         $17, $18, NOW())
       ON CONFLICT (business_id) DO UPDATE SET
-        nombre          = EXCLUDED.nombre,
-        descripcion     = EXCLUDED.descripcion,
-        menu            = CASE WHEN $4 IS NOT NULL THEN EXCLUDED.menu ELSE negocios.menu END,
-        horarios        = EXCLUDED.horarios,
-        direccion       = EXCLUDED.direccion,
-        telefono        = EXCLUDED.telefono,
-        email_contacto  = EXCLUDED.email_contacto,
-        whatsapp        = EXCLUDED.whatsapp,
-        welcome_msg     = EXCLUDED.welcome_msg,
-        bot_nombre      = EXCLUDED.bot_nombre,
-        bot_avatar      = EXCLUDED.bot_avatar,
-        color_widget    = EXCLUDED.color_widget,
-        turnos_activos  = EXCLUDED.turnos_activos,
-        turno_servicio  = EXCLUDED.turno_servicio,
-        modulos_activos = CASE WHEN $16 IS NOT NULL THEN EXCLUDED.modulos_activos ELSE negocios.modulos_activos END,
-        actualizado_en  = NOW()
+        nombre                 = EXCLUDED.nombre,
+        descripcion            = EXCLUDED.descripcion,
+        menu                   = CASE WHEN $4  IS NOT NULL THEN EXCLUDED.menu            ELSE negocios.menu            END,
+        horarios               = EXCLUDED.horarios,
+        direccion              = EXCLUDED.direccion,
+        telefono               = EXCLUDED.telefono,
+        email_contacto         = EXCLUDED.email_contacto,
+        whatsapp               = EXCLUDED.whatsapp,
+        welcome_msg            = EXCLUDED.welcome_msg,
+        bot_nombre             = EXCLUDED.bot_nombre,
+        bot_avatar             = EXCLUDED.bot_avatar,
+        color_widget           = EXCLUDED.color_widget,
+        turnos_activos         = EXCLUDED.turnos_activos,
+        turno_servicio         = EXCLUDED.turno_servicio,
+        modulos_activos        = CASE WHEN $16 IS NOT NULL THEN EXCLUDED.modulos_activos ELSE negocios.modulos_activos END,
+        instagram_access_token = CASE WHEN $17 IS NOT NULL THEN EXCLUDED.instagram_access_token ELSE negocios.instagram_access_token END,
+        instagram_sender_id    = CASE WHEN $18 IS NOT NULL THEN EXCLUDED.instagram_sender_id    ELSE negocios.instagram_sender_id    END,
+        actualizado_en         = NOW()
     `, [
       businessId,
       String(body.nombre         || 'Mi Negocio').slice(0, 100),
@@ -908,7 +920,9 @@ async function handlePutConfig(businessId, res, raw) {
       /^#[0-9a-fA-F]{6}$/.test(body.color_widget) ? body.color_widget : '#6366f1',
       body.turnos_activos ? 1 : 0,
       String(body.turno_servicio || 'Consulta').slice(0, 100),
-      modulosJson
+      modulosJson,
+      igToken  !== undefined ? igToken  : null,
+      igSender !== undefined ? igSender : null
     ]);
     sendJSON(res, 200, { ok: true });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
@@ -1535,26 +1549,24 @@ async function handleResetPassword(res, raw) {
 
 // ── Whisper: descarga y transcripción de notas de voz ────────────────────────
 
-function downloadAudioFromTwilio(mediaUrl) {
+// Descarga genérica con auth header opcional — usada por Twilio e Instagram
+function downloadAudioWithOpts(url, authHeader) {
   return new Promise(function (resolve, reject) {
-    var urlObj  = new URL(mediaUrl);
+    var urlObj  = new URL(url);
+    var headers = {};
+    if (authHeader) headers['Authorization'] = authHeader;
     var options = {
       hostname: urlObj.hostname,
       path:     urlObj.pathname + urlObj.search,
       method:   'GET',
-      headers:  {
-        'Authorization': 'Basic ' + Buffer.from(
-          TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN
-        ).toString('base64')
-      }
+      headers:  headers
     };
     var request = https.request(options, function (response) {
-      // Seguir redirecciones (Twilio usa 301/302 para media)
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        return downloadAudioFromTwilio(response.headers.location).then(resolve).catch(reject);
+        return downloadAudioWithOpts(response.headers.location, authHeader).then(resolve).catch(reject);
       }
       if (response.statusCode !== 200) {
-        return reject(new Error('Twilio media HTTP ' + response.statusCode));
+        return reject(new Error('Media download HTTP ' + response.statusCode));
       }
       var chunks = [];
       response.on('data', function (c) { chunks.push(c); });
@@ -1566,9 +1578,15 @@ function downloadAudioFromTwilio(mediaUrl) {
   });
 }
 
-async function transcribeAudio(mediaUrl, mediaContentType) {
-  console.log('[Whisper] descargando audio desde Twilio:', mediaUrl);
-  var { buffer, contentType } = await downloadAudioFromTwilio(mediaUrl);
+function downloadAudioFromTwilio(mediaUrl) {
+  var auth = 'Basic ' + Buffer.from(TWILIO_ACCOUNT_SID + ':' + TWILIO_AUTH_TOKEN).toString('base64');
+  return downloadAudioWithOpts(mediaUrl, auth);
+}
+
+async function transcribeAudio(mediaUrl, mediaContentType, downloadFn) {
+  downloadFn = downloadFn || downloadAudioFromTwilio;
+  console.log('[Whisper] descargando audio:', mediaUrl);
+  var { buffer, contentType } = await downloadFn(mediaUrl);
   console.log('[Whisper] audio descargado, tamaño:', buffer.length, 'bytes, tipo:', contentType);
 
   // Determinar extensión según content-type para que Whisper lo acepte
@@ -1621,6 +1639,349 @@ async function transcribeAudio(mediaUrl, mediaContentType) {
     request.write(body);
     request.end();
   });
+}
+
+// ── Instagram DMs ─────────────────────────────────────────────────────────────
+
+function sendInstagramMessage(recipientId, text, accessToken) {
+  return new Promise(function (resolve, reject) {
+    var payload = JSON.stringify({
+      recipient: { id: recipientId },
+      message:   { text: text }
+    });
+    var options = {
+      hostname: 'graph.facebook.com',
+      path:     '/v18.0/me/messages?access_token=' + encodeURIComponent(accessToken),
+      method:   'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    var request = https.request(options, function (response) {
+      var chunks = [];
+      response.on('data', function (c) { chunks.push(c); });
+      response.on('end', function () {
+        var raw = Buffer.concat(chunks).toString('utf8');
+        try {
+          var parsed = JSON.parse(raw);
+          if (parsed.error) {
+            console.error('[Instagram] API error:', parsed.error.message);
+            return reject(new Error(parsed.error.message));
+          }
+          resolve(parsed);
+        } catch (_) {
+          resolve(raw);
+        }
+      });
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.write(payload);
+    request.end();
+  });
+}
+
+async function handleInstagramWebhook(req, res) {
+  var u = parseUrl(req);
+
+  // ── Verificación de webhook (GET) ────────────────────────────────────────
+  if (req.method === 'GET') {
+    var mode      = u.query['hub.mode']         || '';
+    var token     = u.query['hub.verify_token'] || '';
+    var challenge = u.query['hub.challenge']    || '';
+    if (mode === 'subscribe' && INSTAGRAM_VERIFY_TOKEN && token === INSTAGRAM_VERIFY_TOKEN) {
+      console.log('[Instagram] Webhook verificado OK');
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end(challenge);
+    }
+    console.warn('[Instagram] Verificación fallida — token incorrecto o INSTAGRAM_VERIFY_TOKEN no configurado');
+    res.writeHead(403); return res.end('Forbidden');
+  }
+
+  // ── Evento entrante (POST) ────────────────────────────────────────────────
+  var raw;
+  try { raw = await readBody(req); } catch (_) {
+    res.writeHead(200); return res.end('OK');
+  }
+  res.writeHead(200); res.end('OK');   // Meta requiere 200 inmediato
+
+  var data;
+  try { data = JSON.parse(raw); } catch (_) { return; }
+
+  // Iterar sobre las entradas
+  var entries = Array.isArray(data.entry) ? data.entry : [];
+  for (var i = 0; i < entries.length; i++) {
+    var messaging = Array.isArray(entries[i].messaging) ? entries[i].messaging : [];
+    for (var j = 0; j < messaging.length; j++) {
+      var event = messaging[j];
+      var senderId = event.sender && event.sender.id;
+      if (!event.message || !senderId) continue;
+
+      var msgText  = event.message.text || '';
+      var attachments = event.message.attachments || [];
+
+      // Buscar negocio por instagram_sender_id
+      var negResult = await pool.query(
+        `SELECT * FROM negocios WHERE instagram_sender_id = $1 AND activo = 1`,
+        [senderId]
+      ).catch(function () { return { rows: [] }; });
+
+      // Si no encontramos por sender, usar instagram_access_token global como fallback
+      var negocio = negResult.rows[0] || null;
+      if (!negocio) {
+        // Intentar con page/business ID (entries[i].id es el page ID)
+        var pageId = entries[i].id || '';
+        if (pageId) {
+          var negResult2 = await pool.query(
+            `SELECT * FROM negocios WHERE instagram_sender_id = $1 AND activo = 1`,
+            [pageId]
+          ).catch(function () { return { rows: [] }; });
+          negocio = negResult2.rows[0] || null;
+        }
+        if (!negocio) {
+          console.warn('[Instagram] No se encontró negocio para sender:', senderId);
+          continue;
+        }
+      }
+
+      var accessToken = negocio.instagram_access_token || INSTAGRAM_ACCESS_TOKEN;
+      if (!accessToken) {
+        console.warn('[Instagram] Sin access_token para negocio:', negocio.business_id);
+        continue;
+      }
+
+      var businessId = negocio.business_id;
+
+      // ── Audio attachment: transcribir con Whisper ─────────────────────────
+      if (!msgText.trim() && attachments.length > 0) {
+        var audioAtt = attachments.find(function (a) {
+          return a.type === 'audio';
+        });
+        if (audioAtt && audioAtt.payload && audioAtt.payload.url) {
+          try {
+            msgText = await transcribeAudio(
+              audioAtt.payload.url,
+              'audio/mp4',
+              function (url) { return downloadAudioWithOpts(url, null); }
+            );
+          } catch (e) {
+            console.error('[Instagram][Whisper] error:', e.message);
+            await sendInstagramMessage(senderId,
+              'Lo siento, no pude entender el audio. ¿Podés escribirme el mensaje?',
+              accessToken
+            ).catch(function () {});
+            continue;
+          }
+        }
+      }
+
+      if (!msgText.trim()) continue;
+
+      // Detectar si es el dueño (instagram_sender_id configurado como sender del dueño)
+      // El dueño se identifica porque su ID coincide con el instagram_sender_id configurado
+      // Pero eso es el page ID — el owner es quien configuró ownerIgId por separado.
+      // Usamos la convención: negocio.instagram_sender_id es el sender ID del DUEÑO.
+      var isOwner = negocio.instagram_sender_id && negocio.instagram_sender_id === senderId;
+
+      // ── Flujo dueño ────────────────────────────────────────────────────────
+      if (isOwner) {
+        try {
+          var results = await Promise.all([
+            pool.query(`
+              SELECT
+                COUNT(*) FILTER (WHERE creado_en::date = CURRENT_DATE)         AS pedidos_hoy,
+                COUNT(*) FILTER (WHERE estado = 'pendiente')                   AS pendientes,
+                COUNT(*) FILTER (WHERE estado = 'confirmado')                  AS confirmados,
+                COUNT(*) FILTER (WHERE estado = 'cancelado')                   AS cancelados,
+                COUNT(*) FILTER (WHERE creado_en >= NOW() - INTERVAL '1 hour') AS ultima_hora,
+                COUNT(*)                                                        AS total_historico
+              FROM pedidos WHERE business_id = $1
+            `, [businessId]),
+            pool.query(`
+              SELECT detalles, estado, creado_en FROM pedidos
+              WHERE business_id = $1 ORDER BY creado_en DESC LIMIT 200
+            `, [businessId]),
+            pool.query(`
+              SELECT TO_CHAR(DATE_TRUNC('week', creado_en), 'YYYY-MM-DD') AS semana_inicio,
+                     COUNT(*) AS total,
+                     COUNT(*) FILTER (WHERE estado IN ('confirmado','entregado')) AS confirmados
+              FROM pedidos WHERE business_id = $1 AND creado_en >= NOW() - INTERVAL '28 days'
+              GROUP BY DATE_TRUNC('week', creado_en) ORDER BY DATE_TRUNC('week', creado_en) DESC
+            `, [businessId]),
+            pool.query(`
+              SELECT TO_CHAR(DATE_TRUNC('month', creado_en), 'YYYY-MM') AS mes,
+                     COUNT(*) AS total,
+                     COUNT(*) FILTER (WHERE estado IN ('confirmado','entregado')) AS confirmados
+              FROM pedidos WHERE business_id = $1 AND creado_en >= NOW() - INTERVAL '3 months'
+              GROUP BY DATE_TRUNC('month', creado_en) ORDER BY DATE_TRUNC('month', creado_en) DESC
+            `, [businessId]),
+            pool.query(`
+              SELECT EXTRACT(DOW FROM creado_en)::int AS dia, COUNT(*) AS total
+              FROM pedidos WHERE business_id = $1 GROUP BY dia ORDER BY total DESC
+            `, [businessId]),
+            pool.query(`
+              SELECT EXTRACT(HOUR FROM creado_en)::int AS hora, COUNT(*) AS total
+              FROM pedidos WHERE business_id = $1 GROUP BY hora ORDER BY total DESC LIMIT 5
+            `, [businessId])
+          ]);
+
+          var counts  = results[0].rows[0];
+          var ultRows = results[1].rows;
+          var semanas = results[2].rows;
+          var meses   = results[3].rows;
+          var porDia  = results[4].rows;
+          var porHora = results[5].rows;
+
+          var ultimos = ultRows.map(function (r) {
+            var d; try { d = JSON.parse(r.detalles); } catch (_) { d = {}; }
+            return { detalles: d, estado: r.estado, creado_en: r.creado_en };
+          });
+
+          function parseMonto(str) {
+            if (!str) return 0;
+            var n = parseFloat(String(str).replace(/[^0-9.,]/g, '').replace(',', '.'));
+            return isNaN(n) ? 0 : n;
+          }
+
+          var ahora     = new Date();
+          var inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+          var hace1hora = new Date(ahora.getTime() - 60 * 60 * 1000);
+          var facturadoHoy = 0, facturadoTotal = 0, facturadoUltimaHora = 0;
+          var facturadoPorSemana = {}, facturadoPorMes = {}, itemConteo = {};
+
+          ultimos.forEach(function (p) {
+            var monto = parseMonto(p.detalles.total);
+            var fecha = new Date(p.creado_en);
+            var confirmado = p.estado === 'confirmado' || p.estado === 'entregado';
+            if (confirmado) {
+              facturadoTotal += monto;
+              if (fecha >= inicioHoy)  facturadoHoy        += monto;
+              if (fecha >= hace1hora)  facturadoUltimaHora += monto;
+              var diaSemana = fecha.getDay();
+              var diffLunes = (diaSemana === 0 ? -6 : 1 - diaSemana);
+              var lunes  = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate() + diffLunes);
+              var clvSem = lunes.toISOString().slice(0, 10);
+              facturadoPorSemana[clvSem] = (facturadoPorSemana[clvSem] || 0) + monto;
+              var clvMes = fecha.getFullYear() + '-' + String(fecha.getMonth() + 1).padStart(2, '0');
+              facturadoPorMes[clvMes] = (facturadoPorMes[clvMes] || 0) + monto;
+            }
+            if (Array.isArray(p.detalles.items)) {
+              p.detalles.items.forEach(function (it) {
+                var nombre = it.nombre || it.name || '?';
+                itemConteo[nombre] = (itemConteo[nombre] || 0) + (parseInt(it.cantidad) || 1);
+              });
+            }
+          });
+
+          var ticketPromedio = parseInt(counts.confirmados) > 0
+            ? (facturadoTotal / parseInt(counts.confirmados)).toFixed(2) : 0;
+          var topItems = Object.entries(itemConteo).sort(function (a, b) { return b[1] - a[1]; })
+            .slice(0, 5).map(function (e) { return '  • ' + e[0] + ': ' + e[1] + ' unid.'; }).join('\n') || '  (sin datos)';
+          var DIAS_NOMBRE = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+          var semanasText = semanas.length ? semanas.map(function (s) {
+            var fact = facturadoPorSemana[s.semana_inicio] || 0;
+            return '  • Semana ' + s.semana_inicio + ': ' + s.total + ' pedidos (' + s.confirmados + ' conf.) | $' + fact.toFixed(2);
+          }).join('\n') : '  (sin datos)';
+          var mesesText = meses.length ? meses.map(function (m) {
+            var fact = facturadoPorMes[m.mes] || 0;
+            return '  • ' + m.mes + ': ' + m.total + ' pedidos (' + m.confirmados + ' conf.) | $' + fact.toFixed(2);
+          }).join('\n') : '  (sin datos)';
+          var diasText = porDia.length ? porDia.map(function (d) {
+            return '  • ' + (DIAS_NOMBRE[d.dia] || 'Día ' + d.dia) + ': ' + d.total + ' pedidos';
+          }).join('\n') : '  (sin datos)';
+          var horasText = porHora.length ? porHora.map(function (h) {
+            return '  • ' + String(h.hora).padStart(2, '0') + ':00 hs: ' + h.total + ' pedidos';
+          }).join('\n') : '  (sin datos)';
+          var menu = []; try { menu = JSON.parse(negocio.menu || '[]'); } catch (_) {}
+          var menuText = menu.length ? menu.map(function (it) {
+            var line = '  • ' + it.nombre;
+            if (it.precio)      line += ' (' + it.precio + ')';
+            if (it.descripcion) line += ' — ' + it.descripcion;
+            return line;
+          }).join('\n') : '  (sin menú configurado)';
+          var ultimosText = ultimos.slice(0, 10).length
+            ? ultimos.slice(0, 10).map(function (p) {
+                var items = Array.isArray(p.detalles.items)
+                  ? p.detalles.items.map(function (i) { return (i.cantidad ? 'x' + i.cantidad + ' ' : '') + (i.nombre || i.name || '?'); }).join(', ')
+                  : '?';
+                var hora  = new Date(p.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+                var fecha = new Date(p.creado_en).toLocaleDateString('es-AR');
+                return '  • [' + p.estado + '] ' + items + ' | Total: ' + (p.detalles.total || '—') + ' | ' + fecha + ' ' + hora;
+              }).join('\n')
+            : '  (sin pedidos aún)';
+
+          var systemPrompt =
+            'Eres el asistente de negocio de ' + negocio.nombre + '. ' +
+            'El dueño te consulta por Instagram DM. ' +
+            'Respondé en texto plano (sin markdown, sin asteriscos), de forma directa y concisa.\n\n' +
+            '══ MÉTRICAS DE HOY ══\n' +
+            'Pedidos hoy: ' + counts.pedidos_hoy + ' | Pendientes: ' + counts.pendientes +
+            ' | Confirmados: ' + counts.confirmados + ' | Cancelados: ' + counts.cancelados + '\n' +
+            'Última hora: ' + counts.ultima_hora + ' pedidos | Facturado hoy: $' + facturadoHoy.toFixed(2) + '\n\n' +
+            '══ HISTÓRICO TOTAL ══\n' +
+            'Total pedidos: ' + counts.total_historico + ' | Facturado: $' + facturadoTotal.toFixed(2) +
+            ' | Ticket promedio: $' + ticketPromedio + '\n\n' +
+            '══ VENTAS POR SEMANA (últimas 4) ══\n' + semanasText + '\n\n' +
+            '══ VENTAS POR MES (últimos 3) ══\n' + mesesText + '\n\n' +
+            '══ DÍA DE LA SEMANA ══\n' + diasText + '\n\n' +
+            '══ HORA PICO (top 5) ══\n' + horasText + '\n\n' +
+            '══ PRODUCTOS MÁS PEDIDOS ══\n' + topItems + '\n\n' +
+            '══ MENÚ ══\n' + menuText + '\n\n' +
+            '══ ÚLTIMOS 10 PEDIDOS ══\n' + ultimosText;
+
+          var reply = await callOpenAI([
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: msgText.trim() }
+          ], false);
+          await sendInstagramMessage(senderId, reply.trim(), accessToken).catch(function (e) {
+            console.error('[Instagram] Error enviando reply dueño:', e.message);
+          });
+        } catch (e) {
+          console.error('[Instagram] Error flujo dueño:', e.message);
+          await sendInstagramMessage(senderId, 'Error al consultar los datos. Intentá de nuevo.', accessToken).catch(function () {});
+        }
+        continue;
+      }
+
+      // ── Flujo cliente ─────────────────────────────────────────────────────
+      try {
+        var igSessionId = 'ig_' + senderId;
+        await ensureSession(businessId, igSessionId);
+
+        var histResult = await pool.query(`
+          SELECT rol, contenido FROM mensajes
+          WHERE session_id = $1 ORDER BY creado_en DESC LIMIT 10
+        `, [igSessionId]);
+        var history = histResult.rows.reverse().map(function (r) {
+          return { role: r.rol, content: r.contenido };
+        });
+
+        await saveMessage(businessId, igSessionId, 'user', msgText.trim());
+
+        var waPrompt = buildWhatsAppCustomerPrompt(negocio);
+        var chatMessages = [{ role: 'system', content: waPrompt }]
+          .concat(history)
+          .concat([{ role: 'user', content: msgText.trim() }]);
+
+        var replyContent = await callOpenAI(chatMessages, true);
+
+        var parsed;
+        try { parsed = JSON.parse(replyContent); } catch (_) { parsed = { text: replyContent }; }
+        var replyText = (parsed && parsed.text) ? parsed.text : replyContent;
+
+        saveMessage(businessId, igSessionId, 'assistant', replyContent).catch(function () {});
+        savePedidoIfDetected(businessId, igSessionId, parsed).catch(function () {});
+
+        await sendInstagramMessage(senderId, replyText, accessToken).catch(function (e) {
+          console.error('[Instagram] Error enviando reply cliente:', e.message);
+        });
+      } catch (e) {
+        console.error('[Instagram] Error flujo cliente:', e.message);
+        await sendInstagramMessage(senderId, 'Lo siento, hubo un error. Intentá de nuevo en un momento.', accessToken).catch(function () {});
+      }
+    }
+  }
 }
 
 // ── WhatsApp webhook ──────────────────────────────────────────────────────────
@@ -2265,6 +2626,24 @@ var server = http.createServer(function (req, res) {
     var turnoId = parseInt(turnoMatch[1], 10);
     return readBody(req).then(function (r) { return handlePatchTurno(turnoId, bid, res, r); })
       .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // ── Instagram webhook (público — validado por Meta) ──────────────────────
+
+  // GET /instagram/webhook  (verificación Meta)
+  if (req.method === 'GET' && u.path === '/instagram/webhook') {
+    return handleInstagramWebhook(req, res).catch(function (e) {
+      console.error('[Instagram] Error verificación:', e.message);
+      res.writeHead(500); res.end();
+    });
+  }
+
+  // POST /instagram/webhook  (eventos entrantes)
+  if (req.method === 'POST' && u.path === '/instagram/webhook') {
+    return handleInstagramWebhook(req, res).catch(function (e) {
+      console.error('[Instagram] Error inesperado:', e.message);
+      res.writeHead(200); res.end('OK');
+    });
   }
 
   // ── Twilio webhook (público — validado por Twilio) ────────────────────────

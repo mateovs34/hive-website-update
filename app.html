@@ -1392,6 +1392,7 @@
           <button class="tab-btn"        onclick="setTab('bot')">🤖 Bot & Widget</button>
           <button class="tab-btn"        onclick="setTab('install')">🔌 Instalación</button>
           <button class="tab-btn"        onclick="setTab('cfg-turnos')">📅 Turnos</button>
+          <button class="tab-btn"        onclick="setTab('canales')">📱 Canales</button>
         </div>
         <div class="config-topbar-actions">
           <span class="save-status" id="save-status"></span>
@@ -1670,6 +1671,44 @@ docker compose up --build -d</div>
               <span id="disp-save-status" style="margin-left:10px;font-size:13px;color:var(--green)"></span>
             </div>
           </div><!-- /tab-cfg-turnos -->
+
+          <!-- ── TAB CANALES ── -->
+          <div class="tab-panel" id="tab-canales">
+
+            <div class="form-section">
+              <div class="form-section-title">Instagram DMs</div>
+              <div class="field-hint" style="margin-bottom:14px">
+                Conectá tu cuenta de Instagram para que el bot responda mensajes directos automáticamente.
+                Necesitás una página de Facebook conectada con Instagram Business/Creator y un access token
+                de larga duración generado desde Meta Developers.
+              </div>
+              <div class="form-row">
+                <label>Access Token</label>
+                <input class="field" id="f-instagram-token" type="text"
+                  placeholder="EAAxxxxxx…" oninput="markDirty()"
+                  autocomplete="off" spellcheck="false">
+                <div class="field-hint">Token de acceso de larga duración. Se obtiene desde Meta for Developers → Tu App → Instagram → Generate Token.</div>
+              </div>
+              <div class="form-row">
+                <label>ID del dueño (Sender ID)</label>
+                <input class="field" id="f-instagram-sender-id" type="text"
+                  placeholder="12345678901234" oninput="markDirty()"
+                  autocomplete="off" spellcheck="false">
+                <div class="field-hint">El IGSID (Instagram Scoped ID) del propietario del negocio. Cuando este ID manda un DM, el bot responde con métricas en lugar del bot de clientes. Podés obtenerlo desde la API o desde los logs del webhook.</div>
+              </div>
+              <div class="form-row">
+                <label>Webhook URL</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input class="field" id="ig-webhook-url" type="text" readonly
+                    style="color:var(--muted);font-size:12px;font-family:monospace"
+                    value="">
+                  <button class="btn btn-ghost btn-sm" onclick="copyIgWebhook()" style="white-space:nowrap">Copiar</button>
+                </div>
+                <div class="field-hint">Configurá esta URL en Meta for Developers → Webhooks → messages. Verify Token: el que configuraste en la variable <code>INSTAGRAM_VERIFY_TOKEN</code>.</div>
+              </div>
+            </div>
+
+          </div><!-- /tab-canales -->
 
         </div><!-- /config-inner -->
       </div><!-- /config-content -->
@@ -3305,9 +3344,24 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
     document.querySelectorAll('.tab-btn').forEach(function (b, i) {
-      b.classList.toggle('active', ['general','menu','bot','install','cfg-turnos'][i] === tab);
+      b.classList.toggle('active', ['general','menu','bot','install','cfg-turnos','canales'][i] === tab);
     });
     if (tab === 'install') renderInstallSnippet();
+    if (tab === 'canales') {
+      var igWhu = document.getElementById('ig-webhook-url');
+      if (igWhu && !igWhu.value) igWhu.value = window.location.origin + '/instagram/webhook';
+    }
+  };
+
+  window.copyIgWebhook = function () {
+    var el = document.getElementById('ig-webhook-url');
+    if (!el) return;
+    navigator.clipboard.writeText(el.value).then(function () {
+      showToast('URL copiada al portapapeles', 'ok');
+    }).catch(function () {
+      el.select(); document.execCommand('copy');
+      showToast('URL copiada', 'ok');
+    });
   };
 
   // ── Utils ──────────────────────────────────────────────────────────────────
@@ -3335,6 +3389,13 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
         document.getElementById('f-telefono').value    = cfg.telefono        || '';
         document.getElementById('f-email').value       = cfg.email_contacto  || '';
         document.getElementById('f-whatsapp').value    = cfg.whatsapp        || '';
+        var igTokenEl  = document.getElementById('f-instagram-token');
+        var igSenderEl = document.getElementById('f-instagram-sender-id');
+        if (igTokenEl)  igTokenEl.value  = cfg.instagram_access_token || '';
+        if (igSenderEl) igSenderEl.value = cfg.instagram_sender_id    || '';
+        // Webhook URL
+        var igWhu = document.getElementById('ig-webhook-url');
+        if (igWhu) igWhu.value = window.location.origin + '/instagram/webhook';
         document.getElementById('f-bot-nombre').value  = cfg.bot_nombre      || '';
         document.getElementById('f-bot-avatar').value  = cfg.bot_avatar      || '';
         document.getElementById('f-welcome').value     = cfg.welcome_msg     || '';
@@ -3385,6 +3446,9 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
       turno_servicio:  (document.getElementById('f-turno-servicio') && document.getElementById('f-turno-servicio').value.trim()) || 'Consulta',
       modulos_activos: window.CFG_getModulos ? CFG_getModulos() : MODULOS_ACTIVOS
     };
+    // Instagram: enviar null para borrar, string para actualizar
+    body.instagram_access_token = document.getElementById('f-instagram-token')     ? (document.getElementById('f-instagram-token').value.trim()     || null) : undefined;
+    body.instagram_sender_id    = document.getElementById('f-instagram-sender-id') ? (document.getElementById('f-instagram-sender-id').value.trim() || null) : undefined;
     apiFetch('/config', {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -3848,7 +3912,8 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
     CS.editingId = null;
     CS.dirty     = false;
     ['f-nombre','f-descripcion','f-horarios','f-direccion','f-telefono',
-     'f-email','f-whatsapp','f-bot-nombre','f-bot-avatar','f-welcome']
+     'f-email','f-whatsapp','f-bot-nombre','f-bot-avatar','f-welcome',
+     'f-instagram-token','f-instagram-sender-id']
       .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
     renderMenu();
     var st = document.getElementById('save-status');
