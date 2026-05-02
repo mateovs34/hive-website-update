@@ -343,6 +343,30 @@
   </div>
 </div>
 
+<!-- Reset password modal -->
+<div class="modal-overlay" id="modal-reset-pwd" onclick="onOverlayClick(event,'modal-reset-pwd')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">🔑 Resetear contraseña</span>
+      <button class="modal-close" onclick="closeResetPwd()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label id="reset-pwd-label">Nueva contraseña para</label>
+        <input class="field" id="reset-pwd-input" type="password" placeholder="Mínimo 6 caracteres"
+               autocomplete="new-password"
+               onkeydown="if(event.key==='Enter') confirmResetPwd()">
+        <div class="field-hint">El usuario podrá cambiarla desde su panel.</div>
+        <div class="error-msg" id="reset-pwd-error" style="display:none"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeResetPwd()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-reset-pwd" onclick="confirmResetPwd()">Guardar contraseña</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Admin auth overlay ─────────────────────────────────────────────────── -->
 <div id="admin-auth-overlay" class="auth-overlay">
   <div class="auth-card">
@@ -555,6 +579,7 @@
             '<a class="btn btn-ghost btn-sm" href="dashboard.html?businessId=' + encodeURIComponent(n.business_id) + '" target="_blank">📊 Dashboard</a>' +
             '<a class="btn btn-ghost btn-sm" href="config.html?businessId='    + encodeURIComponent(n.business_id) + '" target="_blank">⚙️ Config</a>' +
             '<button class="btn btn-ghost btn-sm" onclick="copySnippet(\'' + esc(n.business_id) + '\')">📋 Snippet</button>' +
+            '<button class="btn btn-ghost btn-sm" onclick="askResetPwd(\'' + esc(n.business_id) + '\',\'' + esc(n.nombre) + '\')">🔑 Contraseña</button>' +
             '<button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="askDelete(\'' + esc(n.business_id) + '\',\'' + esc(n.nombre) + '\')">🗑️</button>' +
           '</div>' +
         '</div>'
@@ -693,12 +718,59 @@
       .finally(function () { btn.disabled = false; btn.textContent = 'Sí, eliminar'; });
   };
 
+  // ── Reset password ──────────────────────────────────────────────────────
+
+  var pendingResetBid = null;
+
+  window.askResetPwd = function (bid, nombre) {
+    pendingResetBid = bid;
+    document.getElementById('reset-pwd-label').textContent = 'Nueva contraseña para "' + nombre + '" (' + bid + ')';
+    document.getElementById('reset-pwd-input').value = '';
+    document.getElementById('reset-pwd-error').style.display = 'none';
+    document.getElementById('modal-reset-pwd').classList.add('open');
+    setTimeout(function () { document.getElementById('reset-pwd-input').focus(); }, 100);
+  };
+
+  window.closeResetPwd = function () {
+    pendingResetBid = null;
+    document.getElementById('modal-reset-pwd').classList.remove('open');
+  };
+
+  window.confirmResetPwd = function () {
+    if (!pendingResetBid) return;
+    var pwd    = document.getElementById('reset-pwd-input').value;
+    var errEl  = document.getElementById('reset-pwd-error');
+    var btn    = document.getElementById('btn-reset-pwd');
+    if (!pwd || pwd.length < 6) {
+      errEl.textContent = 'La contraseña debe tener al menos 6 caracteres';
+      errEl.style.display = 'block'; return;
+    }
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    adminFetch('/admin/reset-password', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ businessId: pendingResetBid, newPassword: pwd })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          errEl.textContent = res.data.error || 'Error al resetear';
+          errEl.style.display = 'block'; return;
+        }
+        closeResetPwd();
+        showToast('Contraseña actualizada para ' + pendingResetBid, 'ok');
+      })
+      .catch(function () { showToast('Error de conexión', 'err'); })
+      .finally(function () { btn.disabled = false; btn.textContent = 'Guardar contraseña'; });
+  };
+
   // ── Keyboard ────────────────────────────────────────────────────────────
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       document.getElementById('modal-create').classList.remove('open');
       document.getElementById('confirm-delete').classList.remove('open');
+      document.getElementById('modal-reset-pwd').classList.remove('open');
     }
     if (e.key === 'Enter' && document.getElementById('modal-create').classList.contains('open')) {
       window.createNegocio();

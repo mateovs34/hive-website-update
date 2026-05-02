@@ -1283,6 +1283,7 @@
       <div id="pedidos-module-on">
       <div class="section-topbar">
         <span class="section-topbar-title">Pedidos en tiempo real</span>
+        <button class="btn btn-ghost btn-sm" onclick="imprimirPedidosHoy()" style="font-size:12px">🖨️ Imprimir día</button>
       </div>
 
       <div class="stats-bar">
@@ -1708,6 +1709,30 @@ docker compose up --build -d</div>
                   <button class="btn btn-ghost btn-sm" onclick="copyIgWebhook()" style="white-space:nowrap">Copiar</button>
                 </div>
                 <div class="field-hint">Configurá esta URL en Meta for Developers → Webhooks → messages. Verify Token: el que configuraste en la variable <code>INSTAGRAM_VERIFY_TOKEN</code>.</div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">Mercado Pago</div>
+              <div class="field-hint" style="margin-bottom:14px">
+                Cuando el bot confirme un pedido por WhatsApp, enviará automáticamente un link de pago.
+                El pago aprobado actualiza el estado del pedido a "Confirmado" sin intervención manual.
+              </div>
+              <div class="form-row">
+                <label>Access Token de Mercado Pago</label>
+                <input class="field" id="f-mp-token" type="password"
+                  placeholder="APP_USR-xxxxxxxx…" oninput="markDirty()"
+                  autocomplete="off" spellcheck="false">
+                <div class="field-hint">Encontralo en <strong>mercadopago.com/developers → Credenciales de producción</strong>. Empieza con <code>APP_USR-</code>.</div>
+              </div>
+              <div class="form-row">
+                <label>URL de webhook (Mercado Pago)</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input class="field" id="mp-webhook-url" type="text" readonly
+                    style="color:var(--muted);font-size:12px;font-family:monospace" value="">
+                  <button class="btn btn-ghost btn-sm" onclick="copyMpWebhook()" style="white-space:nowrap">Copiar</button>
+                </div>
+                <div class="field-hint">Configurá esta URL en MP Developers → Tu aplicación → Webhooks → URL de notificación. Seleccioná el evento <code>payment</code>.</div>
               </div>
             </div>
 
@@ -3399,6 +3424,13 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
         // Webhook URL
         var igWhu = document.getElementById('ig-webhook-url');
         if (igWhu) igWhu.value = window.location.origin + '/instagram/webhook';
+        // Mercado Pago
+        var mpEl = document.getElementById('f-mp-token');
+        if (mpEl) mpEl.value = cfg.mp_access_token || '';
+        var mpWhu = document.getElementById('mp-webhook-url');
+        var payload = getTokenPayload();
+        var activeBid = (payload && payload.businessId) || BID;
+        if (mpWhu) mpWhu.value = window.location.origin + '/mp-webhook?businessId=' + encodeURIComponent(activeBid);
         document.getElementById('f-bot-nombre').value  = cfg.bot_nombre      || '';
         document.getElementById('f-bot-avatar').value  = cfg.bot_avatar      || '';
         document.getElementById('f-welcome').value     = cfg.welcome_msg     || '';
@@ -3452,6 +3484,8 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
     // Instagram: enviar null para borrar, string para actualizar
     body.instagram_access_token = document.getElementById('f-instagram-token')     ? (document.getElementById('f-instagram-token').value.trim()     || null) : undefined;
     body.instagram_sender_id    = document.getElementById('f-instagram-sender-id') ? (document.getElementById('f-instagram-sender-id').value.trim() || null) : undefined;
+    // Mercado Pago
+    body.mp_access_token = document.getElementById('f-mp-token') ? (document.getElementById('f-mp-token').value.trim() || null) : undefined;
     apiFetch('/config', {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -3717,6 +3751,23 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
     inp.value = ''; inp.click();
   };
 
+  window.imprimirPedidosHoy = function () {
+    var payload   = getTokenPayload();
+    var activeBid = (payload && payload.businessId) || BID;
+    var fecha     = new Date().toISOString().slice(0, 10);
+    var url = API + '/pedidos/imprimir?businessId=' + encodeURIComponent(activeBid) +
+              '&fecha=' + fecha + '&_token=' + encodeURIComponent(getToken());
+    window.open(url, '_blank');
+  };
+
+  window.copyMpWebhook = function () {
+    var el = document.getElementById('mp-webhook-url');
+    if (!el) return;
+    navigator.clipboard.writeText(el.value)
+      .then(function () { showToast('URL de webhook MP copiada', 'ok'); })
+      .catch(function () { showToast('No se pudo copiar', 'err'); });
+  };
+
   window.handlePdfFile = function (input) {
     var file = input.files && input.files[0];
     if (!file) return;
@@ -3957,7 +4008,7 @@ window.CFG_getModulos = function () { return _cfgModulos.slice(); };
     CS.dirty     = false;
     ['f-nombre','f-descripcion','f-horarios','f-direccion','f-telefono',
      'f-email','f-whatsapp','f-bot-nombre','f-bot-avatar','f-welcome',
-     'f-instagram-token','f-instagram-sender-id']
+     'f-instagram-token','f-instagram-sender-id','f-mp-token']
       .forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
     renderMenu();
     var st = document.getElementById('save-status');

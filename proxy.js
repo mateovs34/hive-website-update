@@ -43,6 +43,7 @@ const TWILIO_WHATSAPP_FROM = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+1415
 const RESEND_API_KEY           = process.env.RESEND_API_KEY           || null;
 const INSTAGRAM_VERIFY_TOKEN   = process.env.INSTAGRAM_VERIFY_TOKEN   || null;
 const INSTAGRAM_ACCESS_TOKEN   = process.env.INSTAGRAM_ACCESS_TOKEN   || null;
+const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN      || null;
 const APP_URL              = process.env.APP_URL || 'https://chatbot-saas-production-0dae.up.railway.app';
 
 const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
@@ -238,6 +239,7 @@ async function initSchema() {
   // Instagram DM integration
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS instagram_access_token TEXT`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS instagram_sender_id TEXT`);
+  await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS mp_access_token TEXT`);
 
   // Asegurar que 'default' exista para datos huérfanos
   await pool.query(`
@@ -396,6 +398,12 @@ function isLoginBlocked(ip) {
   return !!(entry && entry.resetAt > now && entry.count >= LOGIN_MAX);
 }
 
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function getClientIp(req) {
   var fwd = req.headers['x-forwarded-for'];
   return (fwd ? fwd.split(',')[0] : req.socket.remoteAddress || '').trim();
@@ -515,6 +523,248 @@ async function savePedidoIfDetected(businessId, sessionId, parsed) {
         .catch(function (e) { console.error('[Twilio] Error al obtener negocio:', e.message); });
     }
   } catch (e) { console.error('[DB] savePedido:', e.message); }
+}
+
+// ── Pedido: guardar y devolver ID ────────────────────────────────────────────
+
+async function savePedidoAndGetId(businessId, sessionId, pedido) {
+  try {
+    var result = await pool.query(
+      `INSERT INTO pedidos (business_id, session_id, detalles) VALUES ($1, $2, $3) RETURNING id`,
+      [businessId, sessionId, JSON.stringify(pedido)]
+    );
+    var pedidoId = result.rows[0].id;
+    console.log('[DB] Pedido creado — negocio:', businessId, 'sesión:', sessionId, 'id:', pedidoId);
+    if (twilioClient) {
+      pool.query(`SELECT nombre, whatsapp FROM negocios WHERE business_id = $1`, [businessId])
+        .then(function (r) { if (r.rows.length && r.rows[0].whatsapp) sendWhatsAppNotification(r.rows[0], pedido); })
+        .catch(function () {});
+    }
+    return pedidoId;
+  } catch (e) { console.error('[DB] savePedidoAndGetId:', e.message); return null; }
+}
+
+// ── Pedido activo para cambio/cancelación ─────────────────────────────────────
+
+async function getUltimoPedidoActivo(businessId, sessionId) {
+  try {
+    var r = await pool.query(`
+      SELECT id, detalles, estado
+      FROM pedidos
+      WHERE business_id = $1 AND session_id = $2
+        AND estado NOT IN ('cancelado', 'entregado')
+      ORDER BY creado_en DESC LIMIT 1
+    `, [businessId, sessionId]);
+    if (!r.rows.length) return null;
+    var row = r.rows[0];
+    var det; try { det = JSON.parse(row.detalles); } catch (_) { det = {}; }
+    return { id: row.id, detalles: det, estado: row.estado };
+  } catch (e) { return null; }
+}
+
+// ── Mercado Pago ──────────────────────────────────────────────────────────────
+
+function crearPagoMP(accessToken, pedidoId, pedido, businessId) {
+  return new Promise(function (resolve, reject) {
+    var items = (pedido.items || []).map(function (it) {
+      var precio = parseFloat(String(it.precio || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 1;
+      return {
+        title:      String(it.nombre || 'Item').slice(0, 100),
+        quantity:   parseInt(it.cantidad) || 1,
+        unit_price: precio,
+        currency_id: 'ARS'
+      };
+    });
+    if (!items.length) items = [{ title: 'Pedido', quantity: 1, unit_price: 1, currency_id: 'ARS' }];
+    var payload = JSON.stringify({
+      items:              items,
+      external_reference: String(pedidoId),
+      back_urls:          { success: APP_URL, failure: APP_URL, pending: APP_URL },
+      auto_return:        'approved',
+      notification_url:   APP_URL + '/mp-webhook?businessId=' + encodeURIComponent(businessId)
+    });
+    var options = {
+      hostname: 'api.mercadopago.com',
+      path:     '/checkout/preferences',
+      method:   'POST',
+      headers:  {
+        'Content-Type':   'application/json',
+        'Authorization':  'Bearer ' + accessToken,
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    var req2 = https.request(options, function (r2) {
+      var chunks = [];
+      r2.on('data', function (c) { chunks.push(c); });
+      r2.on('end', function () {
+        try { var d = JSON.parse(Buffer.concat(chunks).toString()); resolve(d.init_point || null); }
+        catch (e) { reject(e); }
+      });
+    });
+    req2.on('error', reject);
+    req2.write(payload);
+    req2.end();
+  });
+}
+
+async function handleCrearPago(req, res, businessId) {
+  if (!isBusiness(req, businessId)) return sendUnauthorized(res);
+  try {
+    var raw  = await readBody(req);
+    var body; try { body = JSON.parse(raw); } catch (_) { return sendJSON(res, 400, { error: 'invalid_json' }); }
+    var negRes = await pool.query(`SELECT mp_access_token FROM negocios WHERE business_id = $1`, [businessId]);
+    if (!negRes.rows.length) return sendJSON(res, 404, { error: 'negocio no encontrado' });
+    var token = negRes.rows[0].mp_access_token || MP_ACCESS_TOKEN;
+    if (!token) return sendJSON(res, 400, { error: 'Mercado Pago no configurado para este negocio' });
+    var pedidoFake = { items: [{ nombre: String(body.descripcion || 'Pedido'), cantidad: 1, precio: String(body.monto || '0') }] };
+    var link = await crearPagoMP(token, body.pedidoId || 'manual', pedidoFake, businessId);
+    sendJSON(res, 200, { link: link });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
+async function handleMpWebhook(req, res) {
+  res.writeHead(200); res.end('OK');
+  try {
+    var u   = parseUrl(req);
+    var raw = await readBody(req);
+    var paymentId = u.query.id || u.query['data.id'] || '';
+    if (!paymentId && raw) {
+      try { var notif = JSON.parse(raw); if (notif.data && notif.data.id) paymentId = String(notif.data.id); } catch (_) {}
+    }
+    if (!paymentId) return;
+    var businessId = u.businessId || 'default';
+    var negRes = await pool.query(`SELECT mp_access_token FROM negocios WHERE business_id = $1`, [businessId]);
+    var mpToken = (negRes.rows[0] && negRes.rows[0].mp_access_token) || MP_ACCESS_TOKEN;
+    if (!mpToken) return;
+    var paymentData = await new Promise(function (resolve, reject) {
+      var opts = {
+        hostname: 'api.mercadopago.com',
+        path:     '/v1/payments/' + encodeURIComponent(paymentId),
+        method:   'GET',
+        headers:  { 'Authorization': 'Bearer ' + mpToken }
+      };
+      var r2 = https.request(opts, function (mpRes) {
+        var chunks = [];
+        mpRes.on('data', function (c) { chunks.push(c); });
+        mpRes.on('end', function () { try { resolve(JSON.parse(Buffer.concat(chunks).toString())); } catch (e) { reject(e); } });
+      });
+      r2.on('error', reject); r2.end();
+    });
+    if (paymentData.status !== 'approved') return;
+    var pedidoId = parseInt(paymentData.external_reference);
+    if (!pedidoId) return;
+    await pool.query(
+      `UPDATE pedidos SET estado = 'confirmado' WHERE id = $1 AND business_id = $2 AND estado = 'pendiente'`,
+      [pedidoId, businessId]
+    );
+    console.log('[MercadoPago] Pago aprobado — pedidoId:', pedidoId, 'businessId:', businessId);
+  } catch (e) { console.error('[MercadoPago] Error webhook:', e.message); }
+}
+
+// ── Imprimir pedidos del día ──────────────────────────────────────────────────
+
+async function handlePedidosImprimir(req, res, businessId, query) {
+  // Accept token from query string (needed when opening in a new browser tab)
+  var authorized = isBusiness(req, businessId);
+  if (!authorized && query._token) {
+    try {
+      var p = jwt.verify(query._token, SECRET_KEY);
+      authorized = !!(p && (p.role === 'admin' || p.businessId === businessId));
+    } catch (_) {}
+  }
+  if (!authorized) return sendUnauthorized(res);
+  var fecha = query.fecha || new Date().toISOString().slice(0, 10);
+  try {
+    var results = await Promise.all([
+      pool.query(`SELECT nombre, bot_avatar, color_widget FROM negocios WHERE business_id = $1`, [businessId]),
+      pool.query(`
+        SELECT id, session_id, detalles, estado, creado_en
+        FROM pedidos WHERE business_id = $1 AND creado_en::date = $2::date
+        ORDER BY creado_en ASC
+      `, [businessId, fecha])
+    ]);
+    var negocio = results[0].rows[0] || { nombre: businessId, bot_avatar: '🤖', color_widget: '#6366f1' };
+    var pedidos = results[1].rows.map(function (r) {
+      var det; try { det = JSON.parse(r.detalles); } catch (_) { det = {}; }
+      return { id: r.id, detalles: det, estado: r.estado, creado_en: r.creado_en };
+    });
+    var ESTADO_LABEL = {
+      pendiente: 'Pendiente', confirmado: 'Confirmado', en_preparacion: 'En preparación',
+      en_camino: 'En camino', entregado: 'Entregado', cancelado: 'Cancelado'
+    };
+    var totalConf = pedidos.filter(function (p) { return p.estado === 'confirmado' || p.estado === 'entregado'; }).length;
+    var totalMonto = pedidos.reduce(function (acc, p) {
+      if (p.estado === 'cancelado') return acc;
+      return acc + (parseFloat(String(p.detalles.total || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0);
+    }, 0);
+    var color = escHtml(negocio.color_widget || '#6366f1');
+    var pedidosHtml = pedidos.length ? pedidos.map(function (p) {
+      var items = Array.isArray(p.detalles.items)
+        ? p.detalles.items.map(function (it) {
+            return '<li>' + escHtml((it.cantidad ? 'x' + it.cantidad + ' ' : '') + (it.nombre || it.name || '?')) +
+                   (it.precio ? ' &mdash; ' + escHtml(String(it.precio)) : '') + '</li>';
+          }).join('')
+        : '<li>(sin detalle)</li>';
+      var hora = new Date(p.creado_en).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      return '<div class="pedido' + (p.estado === 'cancelado' ? ' cancelado' : '') + '">' +
+        '<div class="pedido-header">' +
+          '<span class="pedido-num">#' + p.id + '</span>' +
+          '<span class="pedido-hora">' + hora + '</span>' +
+          '<span class="pedido-estado ' + escHtml(p.estado) + '">' + escHtml(ESTADO_LABEL[p.estado] || p.estado) + '</span>' +
+        '</div>' +
+        '<ul class="pedido-items">' + items + '</ul>' +
+        '<div class="pedido-footer">' +
+          '<span class="pedido-total">Total: ' + escHtml(String(p.detalles.total || '—')) + '</span>' +
+          (p.detalles.notas ? '<span class="pedido-notas">Nota: ' + escHtml(String(p.detalles.notas)) + '</span>' : '') +
+        '</div></div>';
+    }).join('') : '<div class="empty">No hay pedidos para este día.</div>';
+
+    var html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+      '<title>Pedidos ' + escHtml(fecha) + ' — ' + escHtml(negocio.nombre) + '</title>' +
+      '<style>' +
+      '*{box-sizing:border-box;margin:0;padding:0}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;background:#f8fafc;color:#1e293b}' +
+      '.container{max-width:800px;margin:0 auto;padding:24px}' +
+      '.header{display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #e2e8f0}' +
+      '.logo{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;background:' + color + '22;border:2px solid ' + color + '44}' +
+      '.header-info h1{font-size:20px;font-weight:700}.header-info p{font-size:13px;color:#64748b}' +
+      '.summary{display:flex;gap:16px;margin-bottom:20px}' +
+      '.sum-card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 18px;flex:1}' +
+      '.sum-card strong{display:block;font-size:22px;font-weight:700}.sum-card span{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}' +
+      '.pedido{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:10px;page-break-inside:avoid}' +
+      '.pedido.cancelado{opacity:.5}' +
+      '.pedido-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}' +
+      '.pedido-num{font-weight:700;font-size:15px}.pedido-hora{font-size:12px;color:#64748b;margin-left:auto}' +
+      '.pedido-estado{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;border:1px solid}' +
+      '.pedido-estado.pendiente{background:#fef9c3;color:#854d0e;border-color:#fde047}' +
+      '.pedido-estado.confirmado{background:#dcfce7;color:#166534;border-color:#4ade80}' +
+      '.pedido-estado.en_preparacion{background:#dbeafe;color:#1e40af;border-color:#60a5fa}' +
+      '.pedido-estado.en_camino{background:#ede9fe;color:#5b21b6;border-color:#a78bfa}' +
+      '.pedido-estado.entregado{background:#d1fae5;color:#065f46;border-color:#34d399}' +
+      '.pedido-estado.cancelado{background:#fee2e2;color:#991b1b;border-color:#f87171}' +
+      '.pedido-items{list-style:none;padding:0;margin-bottom:8px}' +
+      '.pedido-items li{padding:3px 0;border-bottom:1px dotted #f1f5f9}.pedido-items li:last-child{border-bottom:none}' +
+      '.pedido-footer{display:flex;justify-content:space-between;font-size:13px;color:#64748b}' +
+      '.pedido-total{font-weight:600;color:#1e293b}' +
+      '.empty{text-align:center;padding:40px;color:#64748b}' +
+      '.print-btn{position:fixed;bottom:24px;right:24px;background:' + color + ';color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.2)}' +
+      '@media print{body{background:#fff}.print-btn{display:none}.container{padding:0;max-width:100%}}' +
+      '</style></head><body>' +
+      '<div class="container">' +
+      '<div class="header"><div class="logo">' + escHtml(negocio.bot_avatar || '🤖') + '</div>' +
+      '<div class="header-info"><h1>' + escHtml(negocio.nombre) + '</h1>' +
+      '<p>Pedidos del día ' + escHtml(fecha) + ' &middot; ' + pedidos.length + ' pedido' + (pedidos.length !== 1 ? 's' : '') + '</p></div></div>' +
+      '<div class="summary">' +
+      '<div class="sum-card"><strong>' + pedidos.length + '</strong><span>Total pedidos</span></div>' +
+      '<div class="sum-card"><strong>' + totalConf + '</strong><span>Confirmados</span></div>' +
+      '<div class="sum-card"><strong>$' + totalMonto.toFixed(2) + '</strong><span>Facturado</span></div>' +
+      '</div>' + pedidosHtml + '</div>' +
+      '<button class="print-btn" onclick="window.print()">🖨️ Imprimir</button>' +
+      '</body></html>';
+
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    res.end(html);
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
 // ── Memoria de clientes WhatsApp ──────────────────────────────────────────────
@@ -744,7 +994,7 @@ function buildSystemPromptFromConfig(cfg, turnoContext, inventarioContext) {
 }
 
 // System prompt para el bot de WhatsApp — flujo conversacional de pedido
-function buildWhatsAppCustomerPrompt(cfg, cliente) {
+function buildWhatsAppCustomerPrompt(cfg, cliente, pedidoActivo) {
   var menu = [];
   try { menu = JSON.parse(cfg.menu || '[]'); } catch (_) {}
 
@@ -782,10 +1032,30 @@ function buildWhatsAppCustomerPrompt(cfg, cliente) {
       'Si el cliente dice "sí", "lo mismo", "igual" o "lo de siempre", confirmá el último pedido directamente sin volver a preguntar todo.\n\n';
   }
 
+  // Contexto de pedido activo (para cambio/cancelación)
+  var pedidoContext = '';
+  if (pedidoActivo) {
+    var pedItems = (pedidoActivo.detalles.items || []).map(function (it) {
+      return (it.cantidad ? 'x' + it.cantidad + ' ' : '') + (it.nombre || it.name || '?');
+    }).join(', ');
+    var estadosAvanzados = ['en_preparacion', 'en_camino', 'entregado'];
+    if (estadosAvanzados.indexOf(pedidoActivo.estado) !== -1) {
+      pedidoContext =
+        'PEDIDO ACTIVO #' + pedidoActivo.id + ': [' + pedItems + '] | Total: ' + (pedidoActivo.detalles.total || '?') + ' | Estado: ' + pedidoActivo.estado + '\n' +
+        'Este pedido ya está en preparación/camino y NO puede cancelarse ni modificarse. Avisá al cliente amablemente.\n\n';
+    } else {
+      pedidoContext =
+        'PEDIDO ACTIVO #' + pedidoActivo.id + ': [' + pedItems + '] | Total: ' + (pedidoActivo.detalles.total || '?') + ' | Estado: ' + pedidoActivo.estado + '\n' +
+        'Si el cliente quiere CANCELAR su pedido → incluí "cancelarPedido":' + pedidoActivo.id + ' en el JSON.\n' +
+        'Si el cliente quiere MODIFICAR → cancelá el anterior e iniciá nuevo pedido, incluí "modificarPedido":' + pedidoActivo.id + ' en el JSON y empezá el flujo desde cero.\n\n';
+    }
+  }
+
   return (
     'Eres ' + cfg.bot_nombre + ', el asistente de pedidos de ' + cfg.nombre + ' por WhatsApp.\n\n' +
     'DESCRIPCIÓN DEL NEGOCIO:\n' + (cfg.descripcion || 'Negocio local.') + '\n\n' +
     clienteContext +
+    pedidoContext +
     (menuText      ? 'MENÚ DISPONIBLE:\n' + menuText + '\n\n' : '') +
     (cfg.horarios  ? 'HORARIOS: '   + cfg.horarios  + '\n'    : '') +
     (cfg.direccion ? 'DIRECCIÓN: '  + cfg.direccion + '\n'    : '') +
@@ -1001,6 +1271,24 @@ async function handleGetWidgetConfig(businessId, res) {
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
 }
 
+// PUT /admin/reset-password  (solo admin)
+async function handleAdminResetPassword(res, raw) {
+  var body; try { body = JSON.parse(raw); } catch (_) { return sendJSON(res, 400, { error: 'invalid_json' }); }
+  var businessId  = String(body.businessId  || '').trim();
+  var newPassword = String(body.newPassword || '').trim();
+  if (!businessId)           return sendJSON(res, 400, { error: 'businessId requerido' });
+  if (newPassword.length < 6) return sendJSON(res, 400, { error: 'La contraseña debe tener al menos 6 caracteres' });
+  try {
+    var hash = await bcrypt.hash(newPassword, 10);
+    var r = await pool.query(
+      `UPDATE negocios SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL WHERE business_id = $2`,
+      [hash, businessId]
+    );
+    if (r.rowCount === 0) return sendJSON(res, 404, { error: 'Negocio no encontrado' });
+    sendJSON(res, 200, { ok: true });
+  } catch (e) { sendJSON(res, 500, { error: e.message }); }
+}
+
 // GET /config?businessId=xxx
 async function handleGetConfig(businessId, res) {
   if (!businessId) return sendJSON(res, 400, { error: 'businessId requerido' });
@@ -1026,15 +1314,16 @@ async function handlePutConfig(businessId, res, raw) {
     var modulosJson = modulosArr ? JSON.stringify(modulosArr) : null;
     var igToken     = body.instagram_access_token !== undefined ? (String(body.instagram_access_token || '').slice(0, 500) || null) : undefined;
     var igSender    = body.instagram_sender_id    !== undefined ? (String(body.instagram_sender_id    || '').slice(0, 100) || null) : undefined;
+    var mpToken     = body.mp_access_token        !== undefined ? (String(body.mp_access_token        || '').slice(0, 500) || null) : undefined;
     await pool.query(`
       INSERT INTO negocios
         (business_id, nombre, descripcion, menu, horarios, direccion, telefono,
          email_contacto, whatsapp, welcome_msg, bot_nombre, bot_avatar,
          color_widget, turnos_activos, turno_servicio, modulos_activos,
-         instagram_access_token, instagram_sender_id, actualizado_en)
+         instagram_access_token, instagram_sender_id, mp_access_token, actualizado_en)
       VALUES
         ($1, $2, $3, COALESCE($4, '[]'), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE($16, '["pedidos"]'),
-         $17, $18, NOW())
+         $17, $18, $19, NOW())
       ON CONFLICT (business_id) DO UPDATE SET
         nombre                 = EXCLUDED.nombre,
         descripcion            = EXCLUDED.descripcion,
@@ -1050,9 +1339,10 @@ async function handlePutConfig(businessId, res, raw) {
         color_widget           = EXCLUDED.color_widget,
         turnos_activos         = EXCLUDED.turnos_activos,
         turno_servicio         = EXCLUDED.turno_servicio,
-        modulos_activos        = CASE WHEN $16 IS NOT NULL THEN EXCLUDED.modulos_activos ELSE negocios.modulos_activos END,
+        modulos_activos        = CASE WHEN $16 IS NOT NULL THEN EXCLUDED.modulos_activos        ELSE negocios.modulos_activos        END,
         instagram_access_token = CASE WHEN $17 IS NOT NULL THEN EXCLUDED.instagram_access_token ELSE negocios.instagram_access_token END,
         instagram_sender_id    = CASE WHEN $18 IS NOT NULL THEN EXCLUDED.instagram_sender_id    ELSE negocios.instagram_sender_id    END,
+        mp_access_token        = CASE WHEN $19 IS NOT NULL THEN EXCLUDED.mp_access_token        ELSE negocios.mp_access_token        END,
         actualizado_en         = NOW()
     `, [
       businessId,
@@ -1072,7 +1362,8 @@ async function handlePutConfig(businessId, res, raw) {
       String(body.turno_servicio || 'Consulta').slice(0, 100),
       modulosJson,
       igToken  !== undefined ? igToken  : null,
-      igSender !== undefined ? igSender : null
+      igSender !== undefined ? igSender : null,
+      mpToken  !== undefined ? mpToken  : null
     ]);
     sendJSON(res, 200, { ok: true });
   } catch (e) { sendJSON(res, 500, { error: e.message }); }
@@ -2459,12 +2750,15 @@ async function handleWhatsAppWebhook(req, res) {
     }
   }
 
-  // ── Flujo cliente: chatbot con memoria ─────────────────────────────────────
+  // ── Flujo cliente: chatbot con memoria y pedido activo ─────────────────────
   try {
     var sessionId = 'wa_' + senderPhone.replace(/[^0-9]/g, '');
 
-    // Cargar/crear registro de cliente
-    var cliente = await getOrCreateClienteWpp(businessId, senderPhone);
+    // Cargar/crear registro de cliente y pedido activo en paralelo
+    var [cliente, pedidoActivo] = await Promise.all([
+      getOrCreateClienteWpp(businessId, senderPhone),
+      getUltimoPedidoActivo(businessId, sessionId)
+    ]);
 
     await ensureSession(businessId, sessionId);
 
@@ -2481,8 +2775,8 @@ async function handleWhatsAppWebhook(req, res) {
     // Guardar mensaje del usuario
     await saveMessage(businessId, sessionId, 'user', body.trim());
 
-    // Construir mensajes para GPT con contexto de cliente habitual
-    var waPrompt = buildWhatsAppCustomerPrompt(negocio, cliente);
+    // Construir mensajes para GPT con contexto completo
+    var waPrompt = buildWhatsAppCustomerPrompt(negocio, cliente, pedidoActivo);
     var chatMessages = [{ role: 'system', content: waPrompt }]
       .concat(history)
       .concat([{ role: 'user', content: body.trim() }]);
@@ -2498,11 +2792,31 @@ async function handleWhatsAppWebhook(req, res) {
       updateClienteNombre(businessId, senderPhone, parsed.clienteNombre).catch(function () {});
     }
 
-    // Guardar respuesta y detectar pedido (fire-and-forget)
+    // Cancelar pedido activo si el bot lo indicó
+    var pedidoIdCancelar = parsed && (parsed.cancelarPedido || parsed.modificarPedido);
+    if (pedidoIdCancelar) {
+      pool.query(
+        `UPDATE pedidos SET estado = 'cancelado' WHERE id = $1 AND business_id = $2`,
+        [parseInt(pedidoIdCancelar), businessId]
+      ).catch(function () {});
+    }
+
+    // Guardar respuesta (fire-and-forget)
     saveMessage(businessId, sessionId, 'assistant', replyContent).catch(function () {});
+
+    // Nuevo pedido confirmado
     if (parsed && parsed.pedido) {
-      savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
+      var pedidoId = await savePedidoAndGetId(businessId, sessionId, parsed.pedido);
       updateClientePedido(businessId, senderPhone, parsed.pedido).catch(function () {});
+
+      // Mercado Pago: agregar link de pago si el negocio lo tiene configurado
+      var mpToken = negocio.mp_access_token || MP_ACCESS_TOKEN;
+      if (pedidoId && mpToken) {
+        try {
+          var mpLink = await crearPagoMP(mpToken, pedidoId, parsed.pedido, businessId);
+          if (mpLink) replyText += '\n\n💳 Para confirmar tu pedido, pagá aquí: ' + mpLink;
+        } catch (mpErr) { console.error('[MercadoPago] Error al crear preferencia:', mpErr.message); }
+      }
     }
 
     return twimlReply(replyText);
@@ -2817,6 +3131,28 @@ var server = http.createServer(function (req, res) {
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(xml);
     });
+  }
+
+  // PUT /admin/reset-password  (solo admin)
+  if (req.method === 'PUT' && u.path === '/admin/reset-password') {
+    if (!isAdmin(req)) return sendUnauthorized(res);
+    return readBody(req).then(function (r) { return handleAdminResetPassword(res, r); })
+      .catch(function () { sendJSON(res, 500, { error: 'read_error' }); });
+  }
+
+  // GET /pedidos/imprimir?businessId=xxx&fecha=YYYY-MM-DD
+  if (req.method === 'GET' && u.path === '/pedidos/imprimir') {
+    return handlePedidosImprimir(req, res, bid, u.query).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // POST /crear-pago?businessId=xxx
+  if (req.method === 'POST' && u.path === '/crear-pago') {
+    return handleCrearPago(req, res, bid).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
+  // POST /mp-webhook?businessId=xxx  (Mercado Pago IPN)
+  if (req.method === 'POST' && u.path === '/mp-webhook') {
+    return handleMpWebhook(req, res).catch(function (e) { console.error('[MP] webhook error:', e.message); });
   }
 
   // POST /upload-pdf?businessId=xxx
