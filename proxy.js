@@ -27,6 +27,11 @@ const jwt       = require('jsonwebtoken');
 const { Resend }  = require('resend');
 const FormData    = require('form-data');
 
+var pdfParse = null;
+try { pdfParse = require('pdf-parse'); } catch (_) {
+  console.warn('[PDF] pdf-parse no instalado — importación de PDF no disponible');
+}
+
 const PORT           = process.env.PORT           || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DATABASE_URL   = process.env.DATABASE_URL;
@@ -202,6 +207,22 @@ async function initSchema() {
     );
   `);
 
+  // Memoria de clientes WhatsApp
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clientes_wpp (
+      id               SERIAL PRIMARY KEY,
+      business_id      TEXT NOT NULL REFERENCES negocios(business_id) ON DELETE CASCADE,
+      telefono         TEXT NOT NULL,
+      nombre           TEXT NOT NULL DEFAULT '',
+      total_pedidos    INTEGER NOT NULL DEFAULT 0,
+      ultimo_pedido_en TIMESTAMPTZ,
+      preferencias     TEXT NOT NULL DEFAULT '{}',
+      creado_en        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(business_id, telefono)
+    );
+    CREATE INDEX IF NOT EXISTS idx_clientes_wpp ON clientes_wpp(business_id);
+  `);
+
   // Columnas de turnos en negocios (migraciones no destructivas)
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turnos_activos INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE negocios ADD COLUMN IF NOT EXISTS turno_servicio TEXT NOT NULL DEFAULT 'Consulta'`);
@@ -252,6 +273,47 @@ function readBody(req) {
     req.on('end',  function ()  { resolve(Buffer.concat(chunks).toString()); });
     req.on('error', reject);
   });
+}
+
+function readBodyBuffer(req) {
+  return new Promise(function (resolve, reject) {
+    var chunks = [];
+    req.on('data', function (c) { chunks.push(c); });
+    req.on('end',  function ()  { resolve(Buffer.concat(chunks)); });
+    req.on('error', reject);
+  });
+}
+
+function extractFileFromMultipart(body, contentType) {
+  var m = contentType.match(/boundary=(?:"([^"]+)"|([^\s;]+))/i);
+  if (!m) throw new Error('No boundary in Content-Type');
+  var boundary      = m[1] || m[2];
+  var firstBoundary = Buffer.from('--' + boundary + '\r\n');
+  var nextBoundary  = Buffer.from('\r\n--' + boundary);
+  var crlfcrlf      = Buffer.from('\r\n\r\n');
+
+  var pos = body.indexOf(firstBoundary);
+  if (pos === -1) throw new Error('Boundary not found in body');
+  pos += firstBoundary.length;
+
+  while (pos < body.length) {
+    var hEnd = body.indexOf(crlfcrlf, pos);
+    if (hEnd === -1) break;
+    var headers   = body.slice(pos, hEnd).toString('latin1');
+    var dataStart = hEnd + 4;
+    var nextSep   = body.indexOf(nextBoundary, dataStart);
+    var dataEnd   = nextSep !== -1 ? nextSep : body.length;
+
+    if (/filename=/i.test(headers)) {
+      return body.slice(dataStart, dataEnd);
+    }
+    if (nextSep === -1) break;
+    pos = nextSep + nextBoundary.length;
+    if (body[pos] === 45 && body[pos + 1] === 45) break; // "--" = closing boundary
+    if (body[pos] === 13) pos++;
+    if (body[pos] === 10) pos++;
+  }
+  throw new Error('No file found in multipart data');
 }
 
 function parseUrl(req) {
@@ -455,6 +517,65 @@ async function savePedidoIfDetected(businessId, sessionId, parsed) {
   } catch (e) { console.error('[DB] savePedido:', e.message); }
 }
 
+// ── Memoria de clientes WhatsApp ──────────────────────────────────────────────
+
+async function getOrCreateClienteWpp(businessId, telefono) {
+  try {
+    await pool.query(
+      `INSERT INTO clientes_wpp (business_id, telefono)
+       VALUES ($1, $2)
+       ON CONFLICT (business_id, telefono) DO NOTHING`,
+      [businessId, telefono]
+    );
+    var r = await pool.query(
+      `SELECT * FROM clientes_wpp WHERE business_id = $1 AND telefono = $2`,
+      [businessId, telefono]
+    );
+    return r.rows[0] || null;
+  } catch (e) {
+    console.error('[ClienteWpp] getOrCreate:', e.message);
+    return null;
+  }
+}
+
+async function updateClienteNombre(businessId, telefono, nombre) {
+  try {
+    await pool.query(
+      `UPDATE clientes_wpp SET nombre = $3 WHERE business_id = $1 AND telefono = $2`,
+      [businessId, telefono, nombre.trim()]
+    );
+    console.log('[ClienteWpp] nombre guardado:', nombre, 'para', telefono);
+  } catch (e) { console.error('[ClienteWpp] updateNombre:', e.message); }
+}
+
+async function updateClientePedido(businessId, telefono, pedido) {
+  try {
+    var r = await pool.query(
+      `SELECT preferencias FROM clientes_wpp WHERE business_id = $1 AND telefono = $2`,
+      [businessId, telefono]
+    );
+    if (!r.rows.length) return;
+    var prefs = {};
+    try { prefs = JSON.parse(r.rows[0].preferencias || '{}'); } catch (_) {}
+    var historial = prefs.historial || [];
+    historial.unshift({
+      items: pedido.items || [],
+      total: pedido.total || '',
+      fecha: new Date().toISOString()
+    });
+    if (historial.length > 10) historial = historial.slice(0, 10);
+    prefs.historial = historial;
+    await pool.query(
+      `UPDATE clientes_wpp
+       SET total_pedidos    = total_pedidos + 1,
+           ultimo_pedido_en = NOW(),
+           preferencias     = $3
+       WHERE business_id = $1 AND telefono = $2`,
+      [businessId, telefono, JSON.stringify(prefs)]
+    );
+  } catch (e) { console.error('[ClienteWpp] updatePedido:', e.message); }
+}
+
 // ── Helpers de turnos ─────────────────────────────────────────────────────────
 
 function generateSlots(horaInicio, horaFin, duracion) {
@@ -623,7 +744,7 @@ function buildSystemPromptFromConfig(cfg, turnoContext, inventarioContext) {
 }
 
 // System prompt para el bot de WhatsApp — flujo conversacional de pedido
-function buildWhatsAppCustomerPrompt(cfg) {
+function buildWhatsAppCustomerPrompt(cfg, cliente) {
   var menu = [];
   try { menu = JSON.parse(cfg.menu || '[]'); } catch (_) {}
 
@@ -636,9 +757,35 @@ function buildWhatsAppCustomerPrompt(cfg) {
       }).join('\n')
     : '';
 
+  // Contexto de cliente habitual
+  var clienteContext = '';
+  if (cliente && !cliente.nombre) {
+    clienteContext =
+      'CLIENTE NUEVO — si es el primer mensaje del cliente, presentate brevemente y preguntá: "¡Hola! ¿Cómo te llamo?" ' +
+      'Cuando el cliente responda con su nombre, incluí el campo "clienteNombre" en tu respuesta JSON.\n\n';
+  } else if (cliente && cliente.nombre) {
+    var prefs = {};
+    try { prefs = JSON.parse(cliente.preferencias || '{}'); } catch (_) {}
+    var historial = prefs.historial || [];
+    var histText = historial.slice(0, 3).map(function (h, i) {
+      var items = (h.items || []).map(function (it) {
+        return (it.cantidad ? 'x' + it.cantidad + ' ' : '') + (it.nombre || it.name || '?');
+      }).join(', ');
+      var fecha = h.fecha ? new Date(h.fecha).toLocaleDateString('es-AR') : '—';
+      return (i + 1) + '. ' + items + ' (' + fecha + ')';
+    }).join('; ');
+    clienteContext =
+      'CLIENTE HABITUAL: ' + cliente.nombre + ', ha pedido ' + cliente.total_pedidos + ' veces.' +
+      (histText ? ' Sus pedidos anteriores: ' + histText + '.' : '') +
+      ' Podés ofrecerle repetir su último pedido.\n' +
+      'Al saludar usá su nombre: "¡Hola ' + cliente.nombre + '!"\n' +
+      'Si el cliente dice "sí", "lo mismo", "igual" o "lo de siempre", confirmá el último pedido directamente sin volver a preguntar todo.\n\n';
+  }
+
   return (
     'Eres ' + cfg.bot_nombre + ', el asistente de pedidos de ' + cfg.nombre + ' por WhatsApp.\n\n' +
     'DESCRIPCIÓN DEL NEGOCIO:\n' + (cfg.descripcion || 'Negocio local.') + '\n\n' +
+    clienteContext +
     (menuText      ? 'MENÚ DISPONIBLE:\n' + menuText + '\n\n' : '') +
     (cfg.horarios  ? 'HORARIOS: '   + cfg.horarios  + '\n'    : '') +
     (cfg.direccion ? 'DIRECCIÓN: '  + cfg.direccion + '\n'    : '') +
@@ -663,6 +810,9 @@ function buildWhatsAppCustomerPrompt(cfg) {
     'FORMATO — responde SIEMPRE con este JSON exacto:\n' +
     '{"text":"tu respuesta","humanContact":false}\n' +
     'PROHIBIDO: markdown, texto fuera del JSON, comentarios.\n\n' +
+    'CAPTURA DE NOMBRE — cuando el cliente diga su nombre (respuesta a "¿cómo te llamo?"), incluí el campo "clienteNombre":\n' +
+    '{"text":"¡Hola Juan! ¿En qué te ayudo?","humanContact":false,"clienteNombre":"Juan"}\n' +
+    'Solo incluir "clienteNombre" la primera vez que el cliente diga su nombre.\n\n' +
     'REGISTRO DE PEDIDO — solo cuando el cliente confirmó explícitamente, agregá el campo "pedido":\n' +
     '{"text":"¡Pedido registrado! ...","humanContact":false,"pedido":{"items":[{"nombre":"...","cantidad":1,"precio":"$..."}],"total":"$...","notas":""}}\n' +
     'Si el pedido NO fue confirmado explícitamente por el cliente, NUNCA incluyas el campo "pedido".\n\n' +
@@ -2309,9 +2459,12 @@ async function handleWhatsAppWebhook(req, res) {
     }
   }
 
-  // ── Flujo cliente: chatbot normal ───────────────────────────────────────────
+  // ── Flujo cliente: chatbot con memoria ─────────────────────────────────────
   try {
     var sessionId = 'wa_' + senderPhone.replace(/[^0-9]/g, '');
+
+    // Cargar/crear registro de cliente
+    var cliente = await getOrCreateClienteWpp(businessId, senderPhone);
 
     await ensureSession(businessId, sessionId);
 
@@ -2328,8 +2481,8 @@ async function handleWhatsAppWebhook(req, res) {
     // Guardar mensaje del usuario
     await saveMessage(businessId, sessionId, 'user', body.trim());
 
-    // Construir mensajes para GPT con system prompt conversacional de WhatsApp
-    var waPrompt = buildWhatsAppCustomerPrompt(negocio);
+    // Construir mensajes para GPT con contexto de cliente habitual
+    var waPrompt = buildWhatsAppCustomerPrompt(negocio, cliente);
     var chatMessages = [{ role: 'system', content: waPrompt }]
       .concat(history)
       .concat([{ role: 'user', content: body.trim() }]);
@@ -2340,9 +2493,17 @@ async function handleWhatsAppWebhook(req, res) {
     try { parsed = JSON.parse(replyContent); } catch (_) { parsed = { text: replyContent }; }
     var replyText = (parsed && parsed.text) ? parsed.text : replyContent;
 
+    // Guardar nombre si el bot lo capturó por primera vez
+    if (parsed && parsed.clienteNombre && cliente && !cliente.nombre) {
+      updateClienteNombre(businessId, senderPhone, parsed.clienteNombre).catch(function () {});
+    }
+
     // Guardar respuesta y detectar pedido (fire-and-forget)
     saveMessage(businessId, sessionId, 'assistant', replyContent).catch(function () {});
-    savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
+    if (parsed && parsed.pedido) {
+      savePedidoIfDetected(businessId, sessionId, parsed).catch(function () {});
+      updateClientePedido(businessId, senderPhone, parsed.pedido).catch(function () {});
+    }
 
     return twimlReply(replyText);
   } catch (e) {
@@ -2658,8 +2819,67 @@ var server = http.createServer(function (req, res) {
     });
   }
 
+  // POST /upload-pdf?businessId=xxx
+  if (req.method === 'POST' && u.path === '/upload-pdf') {
+    return handleUploadPdf(req, res, bid).catch(function (e) { sendJSON(res, 500, { error: e.message }); });
+  }
+
   res.writeHead(404); res.end();
 });
+
+// ── Upload PDF para importar menú ─────────────────────────────────────────────
+
+async function handleUploadPdf(req, res, businessId) {
+  if (!isBusiness(req, businessId)) return sendUnauthorized(res);
+  if (!pdfParse) return sendJSON(res, 501, { error: 'pdf-parse no instalado en el servidor' });
+
+  try {
+    var bodyBuf = await readBodyBuffer(req);
+    var ct      = req.headers['content-type'] || '';
+    var fileData;
+    try {
+      fileData = extractFileFromMultipart(bodyBuf, ct);
+    } catch (e) {
+      return sendJSON(res, 400, { error: 'No se pudo extraer el PDF: ' + e.message });
+    }
+
+    var pdfData = await pdfParse(fileData);
+    var text    = (pdfData.text || '').trim();
+    if (text.length < 10) {
+      return sendJSON(res, 422, { error: 'El PDF no contiene texto legible (puede ser una imagen escaneada)' });
+    }
+
+    var truncated = text.slice(0, 8000);
+
+    var gptReply = await callOpenAI([
+      {
+        role: 'system',
+        content:
+          'Extraé todos los productos, precios y categorías del siguiente texto de un menú o listado de productos. ' +
+          'Devolvé ÚNICAMENTE un JSON array con este formato exacto: ' +
+          '[{"nombre":"...","precio":"...","categoria":"...","descripcion":"..."}]. ' +
+          'Si no hay precio usá "". Si no hay categoría usá "General". ' +
+          'Sin markdown, sin explicaciones, solo el JSON array.'
+      },
+      { role: 'user', content: truncated }
+    ], false);
+
+    var items;
+    try {
+      var cleaned = gptReply.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      items = JSON.parse(cleaned);
+      if (!Array.isArray(items)) throw new Error('not an array');
+    } catch (_) {
+      return sendJSON(res, 422, { error: 'No se pudo parsear la respuesta', raw: gptReply.slice(0, 500) });
+    }
+
+    console.log('[PDF] Extraídos', items.length, 'productos del PDF — negocio:', businessId);
+    sendJSON(res, 200, { items: items });
+  } catch (e) {
+    console.error('[PDF] Error:', e.message);
+    sendJSON(res, 500, { error: 'Error al procesar el PDF: ' + e.message });
+  }
+}
 
 // ── Arranque ──────────────────────────────────────────────────────────────────
 
