@@ -12,6 +12,7 @@ COPY admin.html ./
 COPY demo.html ./
 COPY tour.html ./
 COPY landing.html ./
+COPY delcar-demo.html ./
 RUN mkdir -p /data
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

@@ -2839,7 +2839,9 @@ var STATIC_FILES = {
   '/tour.html':     { file: 'tour.html',       mime: 'text/html' },
   '/tour':          { file: 'tour.html',       mime: 'text/html' },
   '/landing.html':  { file: 'landing.html',    mime: 'text/html' },
-  '/landing':       { file: 'landing.html',    mime: 'text/html' }
+  '/landing':       { file: 'landing.html',    mime: 'text/html' },
+  '/delcar-demo.html': { file: 'delcar-demo.html', mime: 'text/html' },
+  '/delcar':           { file: 'delcar-demo.html', mime: 'text/html' }
 };
 
 function serveStatic(res, entry) {
