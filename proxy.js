@@ -333,7 +333,7 @@ function parseUrl(req) {
 //
 //  chatLimitIp  : Map<ip,  { count, resetAt }>   — 20 req/hora por IP
 //  chatLimitBid : Map<bid, { count, resetAt }>   — 100 req/hora por businessId
-//  loginFails   : Map<ip,  { count, resetAt }>   — 5 intentos fallidos / 15 min
+//  loginFails   : Map<ip,  { count, resetAt }>   — 10 intentos fallidos / 3 min
 
 var chatLimitIp  = new Map();
 var chatLimitBid = new Map();
@@ -342,8 +342,8 @@ var loginFails   = new Map();
 var CHAT_IP_MAX   = 20;
 var CHAT_BID_MAX  = 100;
 var CHAT_WINDOW   = 60 * 60 * 1000;       // 1 hora en ms
-var LOGIN_MAX     = 5;
-var LOGIN_WINDOW  = 15 * 60 * 1000;       // 15 minutos en ms
+var LOGIN_MAX     = 10;
+var LOGIN_WINDOW  = 3 * 60 * 1000;        // 3 minutos en ms
 
 // Limpieza automática cada hora
 setInterval(function () {
