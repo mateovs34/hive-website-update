@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 function checkAuth(request: Request) {
   const header = request.headers.get("x-dashboard-password")
@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const supabase = getSupabase()
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -73,6 +74,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const supabase = getSupabase()
   const { order_id } = await request.json()
   if (!order_id) {
     return NextResponse.json({ error: "order_id required" }, { status: 400 })

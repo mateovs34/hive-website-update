@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { v4 as uuidv4 } from "uuid"
 import { promises as fs } from "fs"
 import path from "path"
-import { supabase } from "@/lib/supabase"
+import { getSupabase } from "@/lib/supabase"
 
 interface OrderItem {
   title: string
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       0
     )
     const iva = Math.max(0, (total || 0) - subtotal)
-    supabase
+    getSupabase()
       .from("orders")
       .insert({
         order_id: orderId,
