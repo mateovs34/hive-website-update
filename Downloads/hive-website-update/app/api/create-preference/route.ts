@@ -118,29 +118,34 @@ export async function POST(request: Request) {
       0
     )
     const iva = Math.max(0, (total || 0) - subtotal)
-    getSupabase()
+
+    const supabasePayload = {
+      order_id: orderId,
+      customer_name: customer.name,
+      customer_email: customer.email,
+      customer_phone: customer.phone || "",
+      customer_address: customer.address || "",
+      customer_city: customer.city || "",
+      customer_zip: customer.zip || "",
+      items: items.map((item: OrderItem) => ({
+        product: item.title,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+      })),
+      subtotal,
+      iva,
+      total: total || 0,
+      status: "pending",
+    }
+
+    console.log("[create-preference] Supabase insert payload:", JSON.stringify(supabasePayload))
+    const { error: supabaseError } = await getSupabase()
       .from("orders")
-      .insert({
-        order_id: orderId,
-        customer_name: customer.name,
-        customer_email: customer.email,
-        customer_phone: customer.phone || "",
-        customer_address: customer.address || "",
-        customer_city: customer.city || "",
-        customer_zip: customer.zip || "",
-        items: items.map((item: OrderItem) => ({
-          product: item.title,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        })),
-        subtotal,
-        iva,
-        total: total || 0,
-        status: "pending",
-      })
-      .then(({ error }) => {
-        if (error) console.error("Supabase insert error:", error)
-      })
+      .insert(supabasePayload)
+
+    if (supabaseError) {
+      console.error("[create-preference] Supabase insert error:", JSON.stringify(supabaseError))
+    }
 
     // Format items for Mercado Pago
     const mpItems = items.map((item: OrderItem) => ({
