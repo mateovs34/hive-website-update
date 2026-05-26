@@ -1,35 +1,6 @@
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
-import { promises as fs } from "fs"
-import path from "path"
-
-interface Order {
-  order_id: string
-  timestamp: string
-  customer: {
-    name: string
-    email: string
-    phone: string
-    address: string
-    city: string
-    zip: string
-  }
-  items: { product: string; quantity: number; unit_price: number }[]
-  total: number
-  status: string
-}
-
-async function getOrder(orderId: string): Promise<Order | null> {
-  const ordersFile = path.join(process.cwd(), "data", "orders.json")
-
-  try {
-    const data = await fs.readFile(ordersFile, "utf-8")
-    const orders: Order[] = JSON.parse(data)
-    return orders.find(o => o.order_id === orderId) || null
-  } catch {
-    return null
-  }
-}
+import { getSupabase } from "@/lib/supabase"
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("es-AR", {
@@ -68,13 +39,15 @@ export async function POST(request: Request) {
       )
     }
 
-    const order = await getOrder(order_id)
+    const supabase = getSupabase()
+    const { data: order, error: dbError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('order_id', order_id)
+      .single()
 
-    if (!order) {
-      return NextResponse.json(
-        { error: "Order not found" },
-        { status: 404 }
-      )
+    if (dbError || !order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
     }
 
     const resend = new Resend(resendApiKey)
