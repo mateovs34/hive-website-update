@@ -45,29 +45,16 @@ function GraciasContent() {
   const searchParams = useSearchParams()
   const orderId = searchParams.get("order_id")
   const [order, setOrder] = useState<Order | null>(null)
-  const [emailSent, setEmailSent] = useState(false)
-  const [sending, setSending] = useState(false)
 
   useEffect(() => {
-    // Send confirmation email and get order data when page loads
-    if (orderId && !emailSent && !sending) {
-      setSending(true)
-      fetch("/api/send-confirmation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order_id: orderId }),
+    if (!orderId) return
+    fetch(`/api/send-confirmation?order_id=${orderId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.order) setOrder(data.order)
       })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.order) {
-            setOrder(data.order)
-          }
-          setEmailSent(true)
-        })
-        .catch((error) => console.error("Failed to send confirmation email:", error))
-        .finally(() => setSending(false))
-    }
-  }, [orderId, emailSent, sending])
+      .catch((err) => console.error("Failed to load order:", err))
+  }, [orderId])
 
   const whatsappMessage = encodeURIComponent("Hola HIVE! Acabo de hacer un pedido y quiero coordinar el envío")
   const whatsappLink = `https://wa.me/5491134826426?text=${whatsappMessage}`

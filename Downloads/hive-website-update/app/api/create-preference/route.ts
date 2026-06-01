@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid"
 import { promises as fs } from "fs"
 import path from "path"
 import { getSupabase } from "@/lib/supabase"
+import { sendConfirmationEmail } from "@/lib/send-confirmation-email"
 
 interface OrderItem {
   title: string
@@ -145,6 +146,23 @@ export async function POST(request: Request) {
 
     if (supabaseError) {
       console.error("[create-preference] Supabase insert error:", JSON.stringify(supabaseError))
+    } else {
+      // Fire-and-forget — email failure must not block order creation
+      sendConfirmationEmail({
+        order_id: orderId,
+        customer_name: customer.name,
+        customer_email: customer.email,
+        customer_phone: customer.phone || "",
+        customer_address: customer.address || "",
+        customer_city: customer.city || "",
+        customer_zip: customer.zip || "",
+        items: order.items,
+        subtotal,
+        iva,
+        total: total || 0,
+      }).catch((err) =>
+        console.error("[create-preference] Confirmation email failed:", err)
+      )
     }
 
     // Format items for Mercado Pago
