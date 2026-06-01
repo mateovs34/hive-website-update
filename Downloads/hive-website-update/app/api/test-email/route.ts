@@ -6,7 +6,7 @@ export async function GET() {
     const result = await sendConfirmationEmail({
       order_id: 'TEST-001',
       customer_name: 'Mateo Vazquez',
-      customer_email: 'hiiveenergy@gmail.com',
+      customer_email: 'vsmateo@gmail.com',
       customer_phone: '1134567890',
       customer_address: 'Av. Corrientes 1234',
       customer_city: 'Buenos Aires',
