@@ -1,4 +1,4 @@
-import { Resend } from "resend"
+import nodemailer from "nodemailer"
 
 interface OrderItem {
   product?: string
@@ -52,12 +52,13 @@ function getProductDescription(name: string): string {
 }
 
 export async function sendConfirmationEmail(order: ConfirmationOrderData): Promise<unknown> {
-  const resendApiKey = process.env.RESEND_API_KEY
-  if (!resendApiKey) {
-    throw new Error("RESEND_API_KEY not configured")
-  }
-
-  const resend = new Resend(resendApiKey)
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  })
 
   const itemsHtml = order.items.map((item, idx) => {
     const itemName  = item.product || item.name || "Producto"
@@ -186,10 +187,10 @@ export async function sendConfirmationEmail(order: ConfirmationOrderData): Promi
 </body>
 </html>`
 
-  return resend.emails.send({
-    from: "HIIVE Energy <onboarding@resend.dev>",
+  return transporter.sendMail({
+    from: `HIIVE Energy <${process.env.GMAIL_USER}>`,
     to: order.customer_email,
-    subject: `🍯 ¡Tu pedido HIIVE está confirmado! #${order.order_id.slice(0, 8).toUpperCase()}`,
+    subject: `🍯 ¡Tu pedido HIIVE está confirmado! #${order.order_id}`,
     html: emailHtml,
   })
 }
