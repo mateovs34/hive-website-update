@@ -51,7 +51,7 @@ function getProductDescription(name: string): string {
   return ""
 }
 
-export async function sendConfirmationEmail(order: ConfirmationOrderData): Promise<void> {
+export async function sendConfirmationEmail(order: ConfirmationOrderData): Promise<unknown> {
   const resendApiKey = process.env.RESEND_API_KEY
   if (!resendApiKey) {
     throw new Error("RESEND_API_KEY not configured")
@@ -186,7 +186,7 @@ export async function sendConfirmationEmail(order: ConfirmationOrderData): Promi
 </body>
 </html>`
 
-  await resend.emails.send({
+  return resend.emails.send({
     from: "HIIVE Energy <onboarding@resend.dev>",
     to: order.customer_email,
     subject: `🍯 ¡Tu pedido HIIVE está confirmado! #${order.order_id.slice(0, 8).toUpperCase()}`,
