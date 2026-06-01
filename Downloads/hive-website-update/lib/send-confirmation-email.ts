@@ -190,7 +190,7 @@ export async function sendConfirmationEmail(order: ConfirmationOrderData): Promi
   return transporter.sendMail({
     from: `HIIVE Energy <${process.env.GMAIL_USER}>`,
     to: order.customer_email,
-    subject: `🍯 ¡Tu pedido HIIVE está confirmado! #${order.order_id}`,
+    subject: `Tu pedido HIIVE está confirmado - #${order.order_id}`,
     html: emailHtml,
   })
 }
