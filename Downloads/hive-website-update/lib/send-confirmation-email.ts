@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer"
+import { google } from "googleapis"
 
 interface OrderItem {
   product?: string
@@ -52,13 +52,12 @@ function getProductDescription(name: string): string {
 }
 
 export async function sendConfirmationEmail(order: ConfirmationOrderData): Promise<unknown> {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  })
+  const auth = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+  )
+  auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN })
+  const gmail = google.gmail({ version: "v1", auth })
 
   const itemsHtml = order.items.map((item, idx) => {
     const itemName  = item.product || item.name || "Producto"
@@ -187,10 +186,20 @@ export async function sendConfirmationEmail(order: ConfirmationOrderData): Promi
 </body>
 </html>`
 
-  return transporter.sendMail({
-    from: `HIIVE Energy <${process.env.GMAIL_USER}>`,
-    to: order.customer_email,
-    subject: `Tu pedido HIIVE está confirmado - #${order.order_id}`,
-    html: emailHtml,
+  const rfc2822 = [
+    `From: HIIVE Energy <${process.env.GMAIL_USER}>`,
+    `To: ${order.customer_email}`,
+    `Subject: Tu pedido HIIVE esta confirmado - #${order.order_id}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=utf-8`,
+    ``,
+    emailHtml,
+  ].join("\r\n")
+
+  const raw = Buffer.from(rfc2822).toString("base64url")
+
+  return gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw },
   })
 }
